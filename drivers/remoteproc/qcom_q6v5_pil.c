@@ -173,6 +173,7 @@ struct q6v5 {
 	struct completion start_done;
 	struct completion stop_done;
 	bool running;
+	bool coredump_pending;
 
 	phys_addr_t mba_phys;
 	void *mba_region;
@@ -742,6 +743,7 @@ static int q6v5_mpss_load(struct q6v5 *qproc)
 	}
 
 	mpss_reloc = relocate ? min_addr : qproc->mpss_phys;
+	qproc->mpss_reloc = mpss_reloc;
 	/* Load firmware segments */
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		phdr = &phdrs[i];
@@ -816,7 +818,7 @@ static int q6v5_start(struct rproc *rproc)
 				    qproc->proxy_reg_count);
 	if (ret) {
 		dev_err(qproc->dev, "failed to enable proxy supplies\n");
-		return ret;
+		goto clear_coredump_pending;
 	}
 
 	ret = q6v5_clk_enable(qproc->dev, qproc->proxy_clks,
@@ -879,6 +881,19 @@ static int q6v5_start(struct rproc *rproc)
 		dev_err(qproc->dev, "MBA returned unexpected status %d\n", ret);
 		ret = -EINVAL;
 		goto halt_axi_ports;
+	}
+
+	if (qproc->coredump_pending) {
+		dev_info(qproc->dev, "MBA booted, skipping mpss for coredump\n");
+		qproc->coredump_pending = false;
+		q6v5_enable_irqs(qproc);
+		xfermemop_ret = q6v5_xfer_mem_ownership(qproc,
+							&qproc->mba_perm, false,
+							qproc->mba_phys,
+							qproc->mba_size);
+		if (xfermemop_ret)
+			dev_err(qproc->dev, "Failed to reclaim mba buffer\n");
+		return 0;
 	}
 
 	dev_info(qproc->dev, "MBA booted, loading mpss\n");
@@ -946,6 +961,8 @@ disable_proxy_clk:
 disable_proxy_reg:
 	q6v5_regulator_disable(qproc, qproc->proxy_regs,
 			       qproc->proxy_reg_count);
+clear_coredump_pending:
+	qproc->coredump_pending = false;
 
 	return ret;
 }
@@ -956,17 +973,19 @@ static int q6v5_stop(struct rproc *rproc)
 	int ret;
 	u32 val;
 
-	qproc->running = false;
+	if (qproc->running) {
+		qproc->running = false;
+		qcom_smem_state_update_bits(qproc->state,
+				BIT(qproc->stop_bit), BIT(qproc->stop_bit));
 
-	qcom_smem_state_update_bits(qproc->state,
-				    BIT(qproc->stop_bit), BIT(qproc->stop_bit));
+		ret = wait_for_completion_timeout(&qproc->stop_done,
+				msecs_to_jiffies(5000));
+		if (ret == 0)
+			dev_err(qproc->dev, "timed out on wait\n");
 
-	ret = wait_for_completion_timeout(&qproc->stop_done,
-					  msecs_to_jiffies(5000));
-	if (ret == 0)
-		dev_err(qproc->dev, "timed out on wait\n");
-
-	qcom_smem_state_update_bits(qproc->state, BIT(qproc->stop_bit), 0);
+		qcom_smem_state_update_bits(qproc->state,
+				BIT(qproc->stop_bit), 0);
+	}
 
 	q6v5proc_halt_axi_port(qproc, qproc->halt_map, qproc->halt_q6);
 	q6v5proc_halt_axi_port(qproc, qproc->halt_map, qproc->halt_modem);
@@ -1018,10 +1037,31 @@ static void *q6v5_da_to_va(struct rproc *rproc, u64 da, int len)
 	return qproc->mpss_region + offset;
 }
 
+static int qcom_mpss_register_dump_segments(struct rproc *rproc,
+				const struct firmware *fw_unused)
+{
+	const struct firmware *fw;
+	struct q6v5 *qproc = (struct q6v5 *)rproc->priv;
+	int ret;
+
+	ret = request_firmware(&fw, "modem.mdt", qproc->dev);
+	if (ret < 0) {
+		dev_err(qproc->dev, "unable to load modem.mdt\n");
+		return ret;
+	}
+	ret = qcom_register_dump_segments(rproc, fw);
+
+	release_firmware(fw);
+	return ret;
+}
+
 static const struct rproc_ops q6v5_ops = {
 	.start = q6v5_start,
 	.stop = q6v5_stop,
 	.da_to_va = q6v5_da_to_va,
+	.parse_fw = qcom_mpss_register_dump_segments,
+	.prepare_coredump = q6v5_start,
+	.unprepare_coredump = q6v5_stop,
 	.load = q6v5_load,
 };
 
@@ -1037,6 +1077,7 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *dev)
 		return IRQ_HANDLED;
 	}
 
+	qproc->coredump_pending = true;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, MPSS_CRASH_REASON_SMEM, &len);
 	if (!IS_ERR(msg) && len > 0 && msg[0])
 		dev_err(qproc->dev, "watchdog received: %s\n", msg);
@@ -1054,6 +1095,7 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *dev)
 	size_t len;
 	char *msg;
 
+	qproc->coredump_pending = true;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, MPSS_CRASH_REASON_SMEM, &len);
 	if (!IS_ERR(msg) && len > 0 && msg[0])
 		dev_err(qproc->dev, "fatal error received: %s\n", msg);
