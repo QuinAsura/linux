@@ -6,7 +6,9 @@
  */
 
 #include <dt-bindings/clock/qcom,gcc-sdm845.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/qcom,rpmh-rsc.h>
 
 / {
 	interrupt-parent = <&intc>;
@@ -977,6 +979,76 @@
 			compatible = "qcom,sdm845-apss-shared";
 			reg = <0x17990000 0x1000>;
 			#mbox-cells = <1>;
+		};
+
+		apps_rsc: rsc@179e000 {
+			label = "apps_rsc";
+			compatible = "qcom,rpmh-rsc";
+			reg = <0x179e0000 0xd00>, <0x179e0d00 0x3000>;
+			reg-names = "drv", "tcs";
+			interrupts = <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
+			qcom,drv-id = <2>;
+			qcom,tcs-config = <SLEEP_TCS   3>,
+					  <WAKE_TCS    3>,
+					  <ACTIVE_TCS  2>,
+					  <CONTROL_TCS 1>;
+
+			rpmhcc: clock-controller {
+				compatible = "qcom,rpmh-clk-sdm845";
+				#clock-cells = <1>;
+			};
+
+			pm8998-rpmh-regulators {
+				compatible = "qcom,pm8998-rpmh-regulators";
+				qcom,pmic-id = "a";
+
+				pm8998_s1: smps1 {};
+				pm8998_s2: smps2 {};
+				pm8998_s3: smps3 {};
+				pm8998_s4: smps4 {};
+				pm8998_s5: smps5 {};
+				pm8998_s6: smps6 {};
+				pm8998_s7: smps7 {};
+				pm8998_s9: smps9 {};
+				pm8998_l1: ldo1 {};
+				pm8998_l2: ldo2 {};
+				pm8998_l3: ldo3 {};
+				pm8998_l4: ldo4 {};
+				pm8998_l5: ldo5 {};
+				pm8998_l6: ldo6 {};
+				pm8998_l7: ldo7 {};
+				pm8998_l8: ldo8 {};
+				pm8998_l9: ldo9 {};
+				pm8998_l10: ldo10 {};
+				pm8998_l11: ldo11 {};
+				pm8998_l12: ldo12 {};
+				pm8998_l13: ldo13 {};
+				pm8998_l14: ldo14 {};
+				pm8998_l15: ldo15 {};
+				pm8998_l16: ldo16 {};
+				pm8998_l17: ldo17 {};
+				pm8998_l18: ldo18 {};
+				pm8998_l19: ldo19 {};
+				pm8998_l20: ldo20 {};
+				pm8998_l21: ldo21 {};
+				pm8998_l22: ldo22 {};
+				pm8998_l23: ldo23 {};
+				pm8998_l24: ldo24 {};
+				pm8998_l25: ldo25 {};
+				pm8998_l26: ldo26 {};
+				pm8998_l27: ldo27 {};
+				pm8998_l28: ldo28 {};
+				pm8998_lvs1: lvs1 {};
+				pm8998_lvs2: lvs2 {};
+
+			};
+
+			pmi8998-rpmh-regulators {
+				compatible = "qcom,pmi8998-rpmh-regulators";
+				qcom,pmic-id = "b";
+
+				pmi8998_bob: bob {};
+			};
 		};
 
 		intc: interrupt-controller@17a00000 {
