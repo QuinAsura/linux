@@ -143,6 +143,10 @@ struct q6v5 {
 	struct qcom_smem_state *state;
 	unsigned stop_bit;
 
+	unsigned int handover_interrupt;
+	unsigned int wdog_interrupt;
+	unsigned int fatal_interrupt;
+
 	struct clk *active_clks[8];
 	struct clk *proxy_clks[4];
 	int active_clk_count;
@@ -170,6 +174,7 @@ struct q6v5 {
 	struct qcom_rproc_ssr ssr_subdev;
 	struct qcom_sysmon *sysmon;
 	bool need_mem_protection;
+	bool unvoted_flag;
 	int mpss_perm;
 	int mba_perm;
 	int version;
@@ -727,6 +732,7 @@ static int q6v5_start(struct rproc *rproc)
 	int xfermemop_ret;
 	int ret;
 
+	qproc->unvoted_flag = false;
 	ret = q6v5_regulator_enable(qproc, qproc->proxy_regs,
 				    qproc->proxy_reg_count);
 	if (ret) {
@@ -794,9 +800,16 @@ static int q6v5_start(struct rproc *rproc)
 	if (ret)
 		goto reclaim_mpss;
 
+	enable_irq(qproc->handover_interrupt);
+	enable_irq(qproc->wdog_interrupt);
+	enable_irq(qproc->fatal_interrupt);
+
 	ret = wait_for_completion_timeout(&qproc->start_done,
 					  msecs_to_jiffies(5000));
 	if (ret == 0) {
+		disable_irq(qproc->handover_interrupt);
+		disable_irq(qproc->wdog_interrupt);
+		disable_irq(qproc->fatal_interrupt);
 		dev_err(qproc->dev, "start timed out\n");
 		ret = -ETIMEDOUT;
 		goto reclaim_mpss;
@@ -809,11 +822,6 @@ static int q6v5_start(struct rproc *rproc)
 		dev_err(qproc->dev,
 			"Failed to reclaim mba buffer system may become unstable\n");
 	qproc->running = true;
-
-	q6v5_clk_disable(qproc->dev, qproc->proxy_clks,
-			 qproc->proxy_clk_count);
-	q6v5_regulator_disable(qproc, qproc->proxy_regs,
-			       qproc->proxy_reg_count);
 
 	return 0;
 
@@ -893,6 +901,16 @@ static int q6v5_stop(struct rproc *rproc)
 	WARN_ON(ret);
 
 	reset_control_assert(qproc->mss_restart);
+	disable_irq(qproc->handover_interrupt);
+	if (!qproc->unvoted_flag) {
+		q6v5_clk_disable(qproc->dev, qproc->proxy_clks,
+				 qproc->proxy_clk_count);
+		q6v5_regulator_disable(qproc, qproc->proxy_regs,
+				       qproc->proxy_reg_count);
+	}
+	disable_irq(qproc->wdog_interrupt);
+	disable_irq(qproc->fatal_interrupt);
+
 	q6v5_clk_disable(qproc->dev, qproc->active_clks,
 			 qproc->active_clk_count);
 	q6v5_regulator_disable(qproc, qproc->active_regs,
@@ -960,11 +978,26 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t q6v5_handover_interrupt(int irq, void *dev)
+static irqreturn_t q6v5_ready_interrupt(int irq, void *dev)
 {
 	struct q6v5 *qproc = dev;
 
 	complete(&qproc->start_done);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t q6v5_handover_interrupt(int irq, void *dev)
+{
+	struct q6v5 *qproc = dev;
+
+	if (!qproc->unvoted_flag) {
+		qproc->unvoted_flag = true;
+		q6v5_clk_disable(qproc->dev, qproc->proxy_clks,
+				 qproc->proxy_clk_count);
+		q6v5_regulator_disable(qproc, qproc->proxy_regs,
+				       qproc->proxy_reg_count);
+	}
+
 	return IRQ_HANDLED;
 }
 
@@ -1049,7 +1082,8 @@ static int q6v5_init_reset(struct q6v5 *qproc)
 static int q6v5_request_irq(struct q6v5 *qproc,
 			     struct platform_device *pdev,
 			     const char *name,
-			     irq_handler_t thread_fn)
+			     irq_handler_t thread_fn,
+			     unsigned int *irq_num)
 {
 	int ret;
 
@@ -1058,6 +1092,9 @@ static int q6v5_request_irq(struct q6v5 *qproc,
 		dev_err(&pdev->dev, "no %s IRQ defined\n", name);
 		return ret;
 	}
+
+	if (irq_num)
+		*irq_num = ret;
 
 	ret = devm_request_threaded_irq(&pdev->dev, ret,
 					NULL, thread_fn,
@@ -1187,19 +1224,31 @@ static int q6v5_probe(struct platform_device *pdev)
 
 	qproc->version = desc->version;
 	qproc->need_mem_protection = desc->need_mem_protection;
-	ret = q6v5_request_irq(qproc, pdev, "wdog", q6v5_wdog_interrupt);
+	ret = q6v5_request_irq(qproc, pdev, "wdog", q6v5_wdog_interrupt,
+			       &qproc->wdog_interrupt);
+	if (ret < 0)
+		goto free_rproc;
+	disable_irq(qproc->wdog_interrupt);
+
+	ret = q6v5_request_irq(qproc, pdev, "fatal", q6v5_fatal_interrupt,
+			       &qproc->fatal_interrupt);
+	if (ret < 0)
+		goto free_rproc;
+	disable_irq(qproc->fatal_interrupt);
+
+	ret = q6v5_request_irq(qproc, pdev, "ready", q6v5_ready_interrupt,
+			       NULL);
 	if (ret < 0)
 		goto free_rproc;
 
-	ret = q6v5_request_irq(qproc, pdev, "fatal", q6v5_fatal_interrupt);
+	ret = q6v5_request_irq(qproc, pdev, "handover", q6v5_handover_interrupt,
+			       &qproc->handover_interrupt);
 	if (ret < 0)
 		goto free_rproc;
+	disable_irq(qproc->handover_interrupt);
 
-	ret = q6v5_request_irq(qproc, pdev, "handover", q6v5_handover_interrupt);
-	if (ret < 0)
-		goto free_rproc;
-
-	ret = q6v5_request_irq(qproc, pdev, "stop-ack", q6v5_stop_ack_interrupt);
+	ret = q6v5_request_irq(qproc, pdev, "stop-ack", q6v5_stop_ack_interrupt,
+			       NULL);
 	if (ret < 0)
 		goto free_rproc;
 
