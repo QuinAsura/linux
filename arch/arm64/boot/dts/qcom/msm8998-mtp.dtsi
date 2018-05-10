@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved. */
+
+#include "msm8998.dtsi"
+#include "pm8998.dtsi"
+#include "pmi8998.dtsi"
+#include "pm8005.dtsi"
+
+/ {
+	aliases {
+		serial0 = &blsp2_uart1;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	thermal-zones {
+		battery-thermal {
+			polling-delay-passive = <250>;
+			polling-delay = <1000>;
+
+			thermal-sensors = <&tsens0 0>;
+
+			trips {
+				battery_crit: trip0 {
+					temperature = <60000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+		};
+
+		skin-thermal {
+			polling-delay-passive = <250>;
+			polling-delay = <1000>;
+
+			thermal-sensors = <&tsens1 5>;
+
+			trips {
+				skin_alert: trip0 {
+					temperature = <44000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				skip_crit: trip1 {
+					temperature = <70000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+		};
+	};
+};
+
+&soc {
+	serial@c1b0000 {
+		status = "okay";
+	};
+};
+
+&rpm_glink {
+	rpm_requests {
+		pm8998-regulators {
+			s2 {
+				regulator-min-microvolt = <1128000>;
+				regulator-max-microvolt = <1128000>;
+			};
+			s3 {
+				regulator-min-microvolt = <1352000>;
+				regulator-max-microvolt = <1352000>;
+			};
+			s4 {
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+			};
+			s5 {
+				regulator-min-microvolt = <1904000>;
+				regulator-max-microvolt = <2040000>;
+			};
+			s7 {
+				regulator-min-microvolt = <900000>;
+				regulator-max-microvolt = <1028000>;
+			};
+			s8 {
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <800000>;
+			};
+			l1 {
+				regulator-min-microvolt = <880000>;
+				regulator-max-microvolt = <880000>;
+			};
+			l2 {
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+			};
+			l3 {
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1000000>;
+			};
+			l5 {
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <800000>;
+			};
+			l6 {
+				regulator-min-microvolt = <1808000>;
+				regulator-max-microvolt = <1808000>;
+			};
+			l7 {
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+			};
+			l8 {
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+			};
+			l9 {
+				regulator-min-microvolt = <1808000>;
+				regulator-max-microvolt = <2960000>;
+			};
+			l10 {
+				regulator-min-microvolt = <1808000>;
+				regulator-max-microvolt = <2960000>;
+			};
+			l11 {
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1000000>;
+			};
+			l12 {
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+			};
+			l13 {
+				regulator-min-microvolt = <1808000>;
+				regulator-max-microvolt = <2960000>;
+			};
+			l14 {
+				regulator-min-microvolt = <1880000>;
+				regulator-max-microvolt = <1880000>;
+			};
+			l15 {
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+			};
+			l16 {
+				regulator-min-microvolt = <2704000>;
+				regulator-max-microvolt = <2704000>;
+			};
+			l17 {
+				regulator-min-microvolt = <1304000>;
+				regulator-max-microvolt = <1304000>;
+			};
+			l18 {
+				regulator-min-microvolt = <2704000>;
+				regulator-max-microvolt = <2704000>;
+			};
+			l19 {
+				regulator-min-microvolt = <3008000>;
+				regulator-max-microvolt = <3008000>;
+			};
+			l20 {
+				regulator-min-microvolt = <2960000>;
+				regulator-max-microvolt = <2960000>;
+			};
+			l21 {
+				regulator-min-microvolt = <2960000>;
+				regulator-max-microvolt = <2960000>;
+			};
+			l22 {
+				regulator-min-microvolt = <2864000>;
+				regulator-max-microvolt = <2864000>;
+			};
+			l23 {
+				regulator-min-microvolt = <3312000>;
+				regulator-max-microvolt = <3312000>;
+			};
+			l24 {
+				regulator-min-microvolt = <3088000>;
+				regulator-max-microvolt = <3088000>;
+			};
+			l25 {
+				regulator-min-microvolt = <3104000>;
+				regulator-max-microvolt = <3312000>;
+			};
+			l26 {
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+			};
+			l28 {
+				regulator-min-microvolt = <3008000>;
+				regulator-max-microvolt = <3008000>;
+			};
+		};
+
+		pmi8998-regulators {
+			bob {
+				regulator-min-microvolt = <3312000>;
+				regulator-max-microvolt = <3600000>;
+			};
+		};
+	};
+};
