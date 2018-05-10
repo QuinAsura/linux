@@ -9,6 +9,7 @@
 #include <dt-bindings/soc/qcom,gsbi.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/qcom,apr.h>
 / {
 	model = "Qualcomm APQ8064";
 	compatible = "qcom,apq8064";
@@ -235,8 +236,40 @@
 
 			qcom,ipc = <&l2cc 8 15>;
 			qcom,smd-edge = <1>;
+				apr {
+					compatible = "qcom,apr-v2";
+					qcom,smd-channels = "apr_audio_svc";
+					qcom,apr-dest-domain-id = <APR_DOMAIN_ADSP>;
+	
+					q6core {
+						qcom,apr-svc-name = "CORE";
+						qcom,apr-svc-id = <APR_SVC_ADSP_CORE>;
+						compatible = "qcom,q6core";
+					};
+	
+					q6afe: q6afe {
+						compatible = "qcom,q6afe";
+						qcom,apr-svc-name = "AFE";
+						qcom,apr-svc-id = <APR_SVC_AFE>;
+						#sound-dai-cells = <1>;
+					};
+	
+					q6asm: q6asm {
+						compatible = "qcom,q6asm";
+						qcom,apr-svc-name = "ASM";
+						qcom,apr-svc-id = <APR_SVC_ASM>;
+						#sound-dai-cells = <1>;
+					};
+	
+					q6adm: q6adm {
+						compatible = "qcom,q6adm";
+						qcom,apr-svc-name = "ADM";
+						qcom,apr-svc-id = <APR_SVC_ADM>;
+						#sound-dai-cells = <0>;
+					};
+	
+				};
 
-			status = "disabled";
 		};
 
 		dsps@3 {
@@ -316,7 +349,6 @@
 		};
 	};
 
-
 	/*
 	 * These channels from the ADC are simply hardware monitors.
 	 * That is why the ADC is referred to as "HKADC" - HouseKeeping
@@ -331,6 +363,14 @@
 			    <&xoadc 0x00 0x0c>, /* Reference voltage 1.25V */
 			    <&xoadc 0x00 0x0d>, /* Reference voltage 0.625V */
 			    <&xoadc 0x00 0x0e>; /* Charger temperature */
+	};
+
+	clocks {
+		sleep_clk: sleep_clk {
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+			#clock-cells = <0>;
+		};
 	};
 
 	soc: soc {
@@ -376,6 +416,13 @@
 			clock-frequency = <27000000>,
 					  <32768>;
 			cpu-offset = <0x80000>;
+		};
+
+		watchdog@208a038 {
+			compatible = "qcom,kpss-wdt-apq8064";
+			reg = <0x0208a038 0x40>;
+			clocks = <&sleep_clk>;
+			timeout-sec = <10>;
 		};
 
 		acc0: clock-controller@2088000 {
@@ -444,7 +491,7 @@
 				compatible = "qcom,msm-uartdm-v1.3", "qcom,msm-uartdm";
 				reg = <0x12450000 0x100>,
 				      <0x12400000 0x03>;
-				interrupts = <0 193 0x0>;
+				interrupts = <0 193 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI1_UART_CLK>, <&gcc GSBI1_H_CLK>;
 				clock-names = "core", "iface";
 				status = "disabled";
@@ -456,11 +503,12 @@
 				pinctrl-1 = <&i2c1_pins_sleep>;
 				pinctrl-names = "default", "sleep";
 				reg = <0x12460000 0x1000>;
-				interrupts = <0 194 IRQ_TYPE_NONE>;
+				interrupts = <0 194 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI1_QUP_CLK>, <&gcc GSBI1_H_CLK>;
 				clock-names = "core", "iface";
 				#address-cells = <1>;
 				#size-cells = <0>;
+				status = "disabled";
 			};
 
 		};
@@ -484,11 +532,12 @@
 				pinctrl-0 = <&i2c2_pins>;
 				pinctrl-1 = <&i2c2_pins_sleep>;
 				pinctrl-names = "default", "sleep";
-				interrupts = <0 196 IRQ_TYPE_NONE>;
+				interrupts = <0 196 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI2_QUP_CLK>, <&gcc GSBI2_H_CLK>;
 				clock-names = "core", "iface";
 				#address-cells = <1>;
 				#size-cells = <0>;
+				status = "disabled";
 			};
 		};
 
@@ -508,12 +557,13 @@
 				pinctrl-1 = <&i2c3_pins_sleep>;
 				pinctrl-names = "default", "sleep";
 				reg = <0x16280000 0x1000>;
-				interrupts = <GIC_SPI 151 IRQ_TYPE_NONE>;
+				interrupts = <GIC_SPI 151 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI3_QUP_CLK>,
 					 <&gcc GSBI3_H_CLK>;
 				clock-names = "core", "iface";
 				#address-cells = <1>;
 				#size-cells = <0>;
+				status = "disabled";
 			};
 		};
 
@@ -534,10 +584,11 @@
 				pinctrl-1 = <&i2c4_pins_sleep>;
 				pinctrl-names = "default", "sleep";
 				reg = <0x16380000 0x1000>;
-				interrupts = <GIC_SPI 153 IRQ_TYPE_NONE>;
+				interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI4_QUP_CLK>,
 					 <&gcc GSBI4_H_CLK>;
 				clock-names = "core", "iface";
+				status = "disabled";
 			};
 		};
 
@@ -556,7 +607,7 @@
 				compatible = "qcom,msm-uartdm-v1.3", "qcom,msm-uartdm";
 				reg = <0x1a240000 0x100>,
 				      <0x1a200000 0x03>;
-				interrupts = <0 154 0x0>;
+				interrupts = <0 154 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI5_UART_CLK>, <&gcc GSBI5_H_CLK>;
 				clock-names = "core", "iface";
 				status = "disabled";
@@ -565,7 +616,7 @@
 			gsbi5_spi: spi@1a280000 {
 				compatible = "qcom,spi-qup-v1.1.1";
 				reg = <0x1a280000 0x1000>;
-				interrupts = <0 155 0>;
+				interrupts = <0 155 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&spi5_default>;
 				pinctrl-1 = <&spi5_sleep>;
 				pinctrl-names = "default", "sleep";
@@ -587,14 +638,22 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
+			syscon-tcsr = <&tcsr>;
 
 			gsbi6_serial: serial@16540000 {
 				compatible = "qcom,msm-uartdm-v1.3", "qcom,msm-uartdm";
 				reg = <0x16540000 0x100>,
 				      <0x16500000 0x03>;
-				interrupts = <0 156 0x0>;
+				interrupts = <0 156 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI6_UART_CLK>, <&gcc GSBI6_H_CLK>;
 				clock-names = "core", "iface";
+
+				qcom,rx-crci = <11>;
+				qcom,tx-crci = <6>;
+
+				dmas = <&adm 6>, <&adm 7>;
+				dma-names = "rx", "tx";
+
 				status = "disabled";
 			};
 
@@ -604,7 +663,7 @@
 				pinctrl-1 = <&i2c6_pins_sleep>;
 				pinctrl-names = "default", "sleep";
 				reg = <0x16580000 0x1000>;
-				interrupts = <GIC_SPI 157 IRQ_TYPE_NONE>;
+				interrupts = <GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI6_QUP_CLK>,
 					 <&gcc GSBI6_H_CLK>;
 				clock-names = "core", "iface";
@@ -628,7 +687,7 @@
 				compatible = "qcom,msm-uartdm-v1.3", "qcom,msm-uartdm";
 				reg = <0x16640000 0x1000>,
 				      <0x16600000 0x1000>;
-				interrupts = <0 158 0x0>;
+				interrupts = <0 158 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI7_UART_CLK>, <&gcc GSBI7_H_CLK>;
 				clock-names = "core", "iface";
 				status = "disabled";
@@ -640,7 +699,7 @@
 				pinctrl-1 = <&i2c7_pins_sleep>;
 				pinctrl-names = "default", "sleep";
 				reg = <0x16680000 0x1000>;
-				interrupts = <GIC_SPI 159 IRQ_TYPE_NONE>;
+				interrupts = <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gcc GSBI7_QUP_CLK>,
 					 <&gcc GSBI7_H_CLK>;
 				clock-names = "core", "iface";
@@ -1056,7 +1115,7 @@
 			compatible		= "qcom,apq8064-ahci", "generic-ahci";
 			status			= "disabled";
 			reg			= <0x29000000 0x180>;
-			interrupts		= <GIC_SPI 209 IRQ_TYPE_NONE>;
+			interrupts		= <GIC_SPI 209 IRQ_TYPE_LEVEL_HIGH>;
 
 			clocks			= <&gcc SFAB_SATA_S_H_CLK>,
 						<&gcc SATA_H_CLK>,
@@ -1082,7 +1141,7 @@
 		sdcc1bam:dma@12402000{
 			compatible = "qcom,bam-v1.3.0";
 			reg = <0x12402000 0x8000>;
-			interrupts = <0 98 0>;
+			interrupts = <0 98 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&gcc SDC1_H_CLK>;
 			clock-names = "bam_clk";
 			#dma-cells = <1>;
@@ -1092,7 +1151,7 @@
 		sdcc3bam:dma@12182000{
 			compatible = "qcom,bam-v1.3.0";
 			reg = <0x12182000 0x8000>;
-			interrupts = <0 96 0>;
+			interrupts = <0 96 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&gcc SDC3_H_CLK>;
 			clock-names = "bam_clk";
 			#dma-cells = <1>;
@@ -1102,7 +1161,7 @@
 		sdcc4bam:dma@121c2000{
 			compatible = "qcom,bam-v1.3.0";
 			reg = <0x121c2000 0x8000>;
-			interrupts = <0 95 0>;
+			interrupts = <0 95 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&gcc SDC4_H_CLK>;
 			clock-names = "bam_clk";
 			#dma-cells = <1>;
@@ -1172,6 +1231,26 @@
 			};
 		};
 
+		adm: dma@18320000 {
+			compatible = "qcom,adm";
+			reg = <0x18320000 0xE0000>;
+			interrupts = <GIC_SPI 171 IRQ_TYPE_NONE>;
+			#dma-cells = <1>;
+
+			clocks = <&gcc ADM0_CLK>, <&gcc ADM0_PBUS_CLK>;
+			clock-names = "core", "iface";
+
+			resets = <&gcc ADM0_RESET>,
+				 <&gcc ADM0_PBUS_RESET>,
+				 <&gcc ADM0_C0_RESET>,
+				 <&gcc ADM0_C1_RESET>,
+				 <&gcc ADM0_C2_RESET>;
+			reset-names = "clk", "pbus", "c0", "c1", "c2";
+			qcom,ee = <1>;
+
+			status = "disabled";
+		};
+
 		tcsr: syscon@1a400000 {
 			compatible = "qcom,tcsr-apq8064", "syscon";
 			reg = <0x1a400000 0x100>;
@@ -1181,7 +1260,7 @@
 			compatible = "qcom,adreno-3xx";
 			reg = <0x04300000 0x20000>;
 			reg-names = "kgsl_3d0_reg_memory";
-			interrupts = <GIC_SPI 80 0>;
+			interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "kgsl_3d0_irq";
 			clock-names =
 			    "core_clk",
@@ -1281,7 +1360,7 @@
 			label = "MDSS DSI CTRL->0";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			interrupts = <GIC_SPI 82 0>;
+			interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x04700000 0x200>;
 			reg-names = "dsi_ctrl";
 
@@ -1350,8 +1429,8 @@
 			    <&mmcc MDP_AXI_CLK>;
 			reg = <0x07500000 0x100000>;
 			interrupts =
-			    <GIC_SPI 63 0>,
-			    <GIC_SPI 64 0>;
+			    <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>,
+			    <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <2>;
 		};
 
@@ -1366,8 +1445,8 @@
 			    <&mmcc MDP_AXI_CLK>;
 			reg = <0x07600000 0x100000>;
 			interrupts =
-			    <GIC_SPI 61 0>,
-			    <GIC_SPI 62 0>;
+			    <GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>,
+			    <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <2>;
 		};
 
@@ -1382,8 +1461,8 @@
 			    <&mmcc GFX3D_AXI_CLK>;
 			reg = <0x07c00000 0x100000>;
 			interrupts =
-			    <GIC_SPI 69 0>,
-			    <GIC_SPI 70 0>;
+			    <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>,
+			    <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <3>;
 		};
 
@@ -1398,8 +1477,8 @@
 			    <&mmcc GFX3D_AXI_CLK>;
 			reg = <0x07d00000 0x100000>;
 			interrupts =
-			    <GIC_SPI 210 0>,
-			    <GIC_SPI 211 0>;
+			    <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>,
+			    <GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>;
 			qcom,ncb = <3>;
 		};
 
@@ -1418,7 +1497,7 @@
 			#size-cells = <2>;
 			ranges = <0x81000000 0 0 0x0fe00000 0 0x00100000   /* I/O */
 				  0x82000000 0 0 0x08000000 0 0x07e00000>; /* memory */
-			interrupts = <GIC_SPI 238 IRQ_TYPE_NONE>;
+			interrupts = <GIC_SPI 238 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "msi";
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 0x7>;
@@ -1439,6 +1518,26 @@
 			status = "disabled";
 		};
 
+		pil_q6v4: pil@28800000 {
+			compatible	= "qcom,tz-pil", "qcom,apq8064-tz-pil";
+			qcom,firmware-name = "q6";
+			reg		= <0x28800000 0x100>;
+			reg-names	= "qdsp6_base";
+			qcom,pas-id		= <1>; /* PAS_Q6 */
+
+
+			smd-edge {
+				interrupts = <GIC_SPI 90 IRQ_TYPE_EDGE_RISING>;
+				lable = "lpass";
+				qcom,ipc = <&l2cc 8 15>;
+				qcom,smd-edge = <1>;
+
+				status = "okay";
+
+			};
+
+		};
+
 		hdmi: hdmi-tx@4a00000 {
 			compatible = "qcom,hdmi-tx-8960";
 			pinctrl-names = "default";
@@ -1455,6 +1554,7 @@
 
 			phys = <&hdmi_phy>;
 			phy-names = "hdmi-phy";
+			#sound-dai-cells = <1>;
 
 			ports {
 				#address-cells = <1>;
@@ -1537,6 +1637,8 @@
 				};
 			};
 		};
+
+
 
 		riva: riva-pil@3204000 {
 			compatible = "qcom,riva-pil";
