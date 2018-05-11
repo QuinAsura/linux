@@ -1404,13 +1404,13 @@ static const struct rproc_hexagon_res sdm845_mss = {
 	},
 	.reset_clk_names = (char*[]){
 			"iface",
+			"snoc_axi",
 			NULL
 	},
 	.active_clk_names = (char*[]){
 			"bus",
 			"mem",
 			"gpll0_mss",
-			"snoc_axi",
 			"mnoc_axi",
 			NULL
 	},
