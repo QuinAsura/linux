@@ -1024,6 +1024,11 @@
 			cell-index = <0>;
 		};
 
+		apss: syscon@1799000c {
+			compatible = "syscon";
+			reg = <0x17990000 0x1000>;
+		};
+
 		apss_shared: mailbox@17990000 {
 			compatible = "qcom,sdm845-apss-shared";
 			reg = <0x17990000 0x1000>;
