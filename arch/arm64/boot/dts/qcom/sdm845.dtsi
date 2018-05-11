@@ -226,6 +226,12 @@
 		hwlocks = <&tcsr_mutex 3>;
 	};
 
+	firmware {
+		scm {
+			compatible = "qcom,scm-msm8996";
+		};
+	};
+
 	psci {
 		compatible = "arm,psci-1.0";
 		method = "smc";
