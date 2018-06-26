@@ -395,7 +395,7 @@ config USB_CONFIGFS_F_CDEV
 	  or to conserve kernel memory, say "N".
 
 config USB_CONFIGFS_UEVENT
-	boolean "Uevent notification of Gadget state"
+	bool "Uevent notification of Gadget state"
 	depends on USB_CONFIGFS
 	help
 	  Enable uevent notifications to userspace when the gadget
