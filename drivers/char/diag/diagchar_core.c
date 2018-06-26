@@ -22,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/ratelimit.h>
 #include <linux/timer.h>
+#include <linux/kmemleak.h>
 #ifdef CONFIG_DIAG_OVER_USB
 #include <linux/usb/usbdiag.h>
 #endif
@@ -205,7 +206,7 @@ do {								\
 	ret += length;						\
 } while (0)
 
-static void drain_timer_func(unsigned long data)
+static void drain_timer_func(struct timer_list *unused)
 {
 	queue_work(driver->diag_wq, &(driver->diag_drain_work));
 }
@@ -1367,7 +1368,7 @@ int diag_md_session_create(int mode, int peripheral_mask, int proc)
 		driver->md_session_map[i] = new_session;
 		driver->md_session_mask |= MD_PERIPHERAL_MASK(i);
 	}
-	setup_timer(&new_session->hdlc_reset_timer,
+	timer_setup(&new_session->hdlc_reset_timer,
 		diag_md_hdlc_reset_timer_func,
 		new_session->pid);
 
@@ -3824,7 +3825,7 @@ static int __init diagchar_init(void)
 	driver->delayed_rsp_id = 0;
 	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
-	setup_timer(&drain_timer, drain_timer_func, 1234);
+	timer_setup(&drain_timer, drain_timer_func, 0);
 	driver->supports_sockets = 1;
 	driver->time_sync_enabled = 0;
 	driver->uses_time_api = 0;

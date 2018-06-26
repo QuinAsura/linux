@@ -454,7 +454,7 @@ static void socket_open_server(struct diag_socket_info *info)
 		       info->name);
 		return;
 	}
-	ret = kernel_getsockname(info->hdl, (struct sockaddr *)&sq, &sl);
+	sl = kernel_getsockname(info->hdl, (struct sockaddr *)&sq);
 	if (ret < 0) {
 		pr_err("diag: In %s, getsockname failed %d\n", __func__,
 		       ret);

@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/kmemleak.h>
 #include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
