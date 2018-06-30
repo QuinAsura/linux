@@ -12,6 +12,7 @@
 #include <dt-bindings/phy/phy-qcom-qusb2.h>
 #include <dt-bindings/reset/qcom,sdm845-aoss.h>
 #include <dt-bindings/soc/qcom,ipa.h>
+#include <dt-bindings/msm/msm-bus-ids.h>
 
 / {
 	interrupt-parent = <&intc>;
@@ -1161,6 +1162,11 @@
 				qcom,pmic-id = "b";
 
 				pmi8998_bob: bob {};
+			};
+
+			msm_bus_apps_rsc {
+				compatible = "qcom,msm-bus-rsc";
+				qcom,msm-bus-id = <MSM_BUS_RSC_APPS>;
 			};
 		};
 
