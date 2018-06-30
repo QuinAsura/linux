@@ -22,4 +22,3 @@ obj-$(CONFIG_QCOM_SCM)	+= scm.o
 obj-$(CONFIG_QCOM_WCNSS_CTRL) += wcnss_ctrl.o
 obj-$(CONFIG_ARCH_MSM8996) +=	kryo-l2-accessors.o
 obj-$(CONFIG_QCOM_APR) += apr.o
-obj-$(CONFIG_QCOM_BUS_SCALING) += msm_bus/
