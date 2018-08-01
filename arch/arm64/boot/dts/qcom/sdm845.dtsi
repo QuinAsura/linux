@@ -67,6 +67,11 @@
 			no-map;
 			reg = <0 0x96500000 0 0x200000>;
 		};
+
+		wlan_msa_mem: reserved-memory@96700000 {
+			no-map;
+			reg = <0 0x96700000 0 0x100000>;
+		};
 	};
 
 	cpus {
@@ -2500,6 +2505,26 @@
 				interrupt-controller;
 				#interrupt-cells = <2>;
 			};
+		};
+
+		qcom,wifi {
+			compatible = "qcom,wcn3990-wifi";
+			reg = <0x18800000 0x800000>;
+			reg-names = "membase";
+			memory-region = <&wlan_msa_mem>;
+			interrupts =
+			<0 413 IRQ_TYPE_LEVEL_HIGH/* CE0 */ >,
+			<0 414 IRQ_TYPE_LEVEL_HIGH /* CE1 */ >,
+			<0 415 IRQ_TYPE_LEVEL_HIGH /* CE2 */ >,
+			<0 416 IRQ_TYPE_LEVEL_HIGH /* CE3 */ >,
+			<0 417 IRQ_TYPE_LEVEL_HIGH /* CE4 */ >,
+			<0 418 IRQ_TYPE_LEVEL_HIGH /* CE5 */ >,
+			<0 420 IRQ_TYPE_LEVEL_HIGH /* CE6 */ >,
+			<0 421 IRQ_TYPE_LEVEL_HIGH /* CE7 */ >,
+			<0 422 IRQ_TYPE_LEVEL_HIGH /* CE8 */ >,
+			<0 423 IRQ_TYPE_LEVEL_HIGH/* CE9 */ >,
+			<0 424 IRQ_TYPE_LEVEL_HIGH/* CE10 */ >,
+			<0 425 IRQ_TYPE_LEVEL_HIGH /* CE11 */ >;
 		};
 	};
 };
