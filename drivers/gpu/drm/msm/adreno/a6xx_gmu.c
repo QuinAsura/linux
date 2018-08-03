@@ -65,6 +65,26 @@ static bool a6xx_gmu_gx_is_on(struct a6xx_gmu *gmu)
 		A6XX_GMU_SPTPRAC_PWR_CLK_STATUS_GX_HM_CLK_OFF));
 }
 
+static int a6xx_gmu_set_freq(struct a6xx_gmu *gmu, int index)
+{
+	gmu_write(gmu, REG_A6XX_GMU_DCVS_ACK_OPTION, 0);
+
+	gmu_write(gmu, REG_A6XX_GMU_DCVS_PERF_SETTING,
+		((index << 24) & 0xff) | (3 & 0xf));
+
+	/*
+	 * Send an invalid index as a vote for the bus bandwidth and let the
+	 * firmware decide on the right vote
+	 */
+	gmu_write(gmu, REG_A6XX_GMU_DCVS_BW_SETTING, 0xff);
+
+	/* Set and clear the OOB for DCVS to trigger the GMU */
+	a6xx_gmu_set_oob(gmu, GMU_OOB_DCVS_SET);
+	a6xx_gmu_clear_oob(gmu, GMU_OOB_DCVS_SET);
+
+	return gmu_read(gmu, REG_A6XX_GMU_DCVS_RETURN);
+}
+
 static bool a6xx_gmu_check_idle_level(struct a6xx_gmu *gmu)
 {
 	u32 val;
@@ -610,6 +630,9 @@ int a6xx_gmu_reset(struct a6xx_gpu *a6xx_gpu)
 	if (!ret)
 		ret = a6xx_hfi_start(gmu, GMU_COLD_BOOT);
 
+	/* Set the GPU back to the highest power frequency */
+	a6xx_gmu_set_freq(gmu, gmu->nr_gpu_freqs - 1);
+
 	if (ret)
 		a6xx_gmu_clear_oob(gmu, GMU_OOB_BOOT_SLUMBER);
 
@@ -638,6 +661,9 @@ int a6xx_gmu_resume(struct a6xx_gpu *a6xx_gpu)
 		goto out;
 
 	ret = a6xx_hfi_start(gmu, status);
+
+	/* Set the GPU to the highest power frequency */
+	a6xx_gmu_set_freq(gmu, gmu->nr_gpu_freqs - 1);
 
 out:
 	/* Make sure to turn off the boot OOB request on error */
