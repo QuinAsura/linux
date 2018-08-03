@@ -255,12 +255,12 @@ static int a6xx_hfi_send_perf_table(struct a6xx_gmu *gmu)
 
 	for (i = 0; i < gmu->nr_gpu_freqs; i++) {
 		msg.gx_votes[i].vote = gmu->gx_arc_votes[i];
-		msg.gx_votes[i].vote = gmu->gpu_freqs[i] / 1000;
+		msg.gx_votes[i].freq = gmu->gpu_freqs[i] / 1000;
 	}
 
 	for (i = 0; i < gmu->nr_gmu_freqs; i++) {
 		msg.cx_votes[i].vote = gmu->cx_arc_votes[i];
-		msg.cx_votes[i].vote = gmu->gmu_freqs[i] / 1000;
+		msg.cx_votes[i].freq = gmu->gmu_freqs[i] / 1000;
 	}
 
 	return a6xx_hfi_send_msg(gmu, HFI_H2F_MSG_PERF_TABLE, &msg, sizeof(msg),

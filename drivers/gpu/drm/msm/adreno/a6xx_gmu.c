@@ -907,13 +907,16 @@ static int a6xx_gmu_rpmh_arc_votes_init(struct device *dev, u32 *votes,
 
 		/*
 		 * Look for a level in in the secondary list that matches. If
-		 * nothing fits, use the maximum
+		 * nothing fits, use the maximum non zero vote
 		 */
-		sindex = sec_count - 1;
 
-		for (j = 0; j < sec_count - 1; j++) {
-			if (sec[j] >= level)
+		for (j = 0; j < sec_count; j++) {
+			if (sec[j] >= level) {
 				sindex = j;
+				break;
+			} else if (sec[j]) {
+				sindex = j;
+			}
 		}
 
 		/* Construct the vote */
