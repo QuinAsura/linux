@@ -231,8 +231,6 @@ int adreno_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 		int nr_rings);
 void adreno_gpu_cleanup(struct adreno_gpu *gpu);
 int adreno_load_fw(struct adreno_gpu *adreno_gpu);
-
-
 void adreno_gpu_state_destroy(struct msm_gpu_state *state);
 
 int adreno_gpu_state_get(struct msm_gpu *gpu, struct msm_gpu_state *state);
