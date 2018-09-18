@@ -121,6 +121,7 @@ static inline void gmu_rmw(struct a6xx_gmu *gmu, u32 reg, u32 mask, u32 or)
 enum a6xx_gmu_oob_state {
 	GMU_OOB_BOOT_SLUMBER = 0,
 	GMU_OOB_GPU_SET,
+	GMU_OOB_DCVS_SET,
 };
 
 /* These are the interrupt / ack bits for each OOB request that are set

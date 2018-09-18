@@ -167,6 +167,11 @@ int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 		ack = GMU_OOB_BOOT_SLUMBER_ACK;
 		name = "BOOT_SLUMBER";
 		break;
+	case GMU_OOB_DCVS_SET:
+		request = GMU_OOB_DCVS_REQUEST;
+		ack = GMU_OOB_DCVS_ACK;
+		name = "GPU_DCVS";
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -201,6 +206,10 @@ void a6xx_gmu_clear_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 	case GMU_OOB_BOOT_SLUMBER:
 		gmu_write(gmu, REG_A6XX_GMU_HOST2GMU_INTR_SET,
 			1 << GMU_OOB_BOOT_SLUMBER_CLEAR);
+		break;
+	case GMU_OOB_DCVS_SET:
+		gmu_write(gmu, REG_A6XX_GMU_HOST2GMU_INTR_SET,
+			1 << GMU_OOB_DCVS_CLEAR);
 		break;
 	}
 }
