@@ -540,8 +540,8 @@ config SPI_QUP
 	  will be called spi_qup.
 
 config SPI_QCOM_GENI
-	tristate "Qualcomm SPI controller with QUP interface"
-	depends on ARCH_QCOM || (ARM && COMPILE_TEST)
+	tristate "Qualcomm GENI based SPI controller"
+	depends on QCOM_GENI_SE
 	help
 	  This driver supports GENI serial engine based SPI controller in
 	  master mode on the Qualcomm Technologies Inc.'s SoCs. If you say
