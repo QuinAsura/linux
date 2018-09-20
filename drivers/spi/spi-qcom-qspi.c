@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/pm_runtime.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
 
@@ -140,7 +141,6 @@ struct qspi_xfer {
 	int buswidth;
 	enum qspi_dir dir;
 	bool is_last;
-	bool is_dummy;
 };
 
 enum qspi_clocks {
@@ -153,9 +153,8 @@ struct qcom_qspi {
 	void __iomem *base;
 	struct device *dev;
 	struct clk_bulk_data clks[QSPI_NUM_CLKS];
-	int irq;
 	struct qspi_xfer xfer;
-	struct completion transfer_complete;
+	spinlock_t lock;
 };
 
 static int qspi_buswidth_to_iomode(struct qcom_qspi *ctrl, int buswidth)
@@ -169,7 +168,7 @@ static int qspi_buswidth_to_iomode(struct qcom_qspi *ctrl, int buswidth)
 		return SDR_4BIT;
 	default:
 		dev_warn_once(ctrl->dev,
-			      "Unexpected bus width: %d\n", buswidth);
+				"Unexpected bus width: %d\n", buswidth);
 		return SDR_1BIT;
 	}
 }
@@ -224,161 +223,81 @@ static void qcom_qspi_pio_xfer(struct qcom_qspi *ctrl)
 	qcom_qspi_pio_xfer_ctrl(ctrl);
 }
 
-static int wait_for_xfer(struct qcom_qspi *ctrl)
+static void qcom_qspi_handle_err(struct spi_master *master,
+				 struct spi_message *msg)
 {
-	int ret = 0;
+	struct qcom_qspi *ctrl = spi_master_get_devdata(master);
+	unsigned long flags;
 
-	if (!wait_for_completion_timeout(&ctrl->transfer_complete, HZ)) {
-		ctrl->xfer.rem_bytes = 0;
-		writel(0, ctrl->base + MSTR_INT_EN);
-		ret = -ETIMEDOUT;
-	}
-
-	return ret;
+	spin_lock_irqsave(&ctrl->lock, flags);
+	writel(0, ctrl->base + MSTR_INT_EN);
+	ctrl->xfer.rem_bytes = 0;
+	spin_unlock_irqrestore(&ctrl->lock, flags);
 }
 
-static int process_opcode(const struct spi_mem_op *op, struct qcom_qspi *ctrl)
+static int qcom_qspi_transfer_one(struct spi_master *master,
+				  struct spi_device *slv,
+				  struct spi_transfer *xfer)
 {
-	ctrl->xfer.dir = QSPI_WRITE;
-	ctrl->xfer.buswidth = op->cmd.buswidth;
-	ctrl->xfer.is_last = !(op->addr.nbytes ||
-			       op->dummy.nbytes || op->data.nbytes);
-	ctrl->xfer.is_dummy = false;
-	ctrl->xfer.rem_bytes = 1;
-	ctrl->xfer.tx_buf = &op->cmd.opcode;
-	qcom_qspi_pio_xfer(ctrl);
-
-	return wait_for_xfer(ctrl);
-}
-
-static int process_addr(const struct spi_mem_op *op, struct qcom_qspi *ctrl)
-{
-	u8 buf[8];
-	int bytes_left = op->addr.nbytes;
-	u64 addr = op->addr.val;
-
-	/* Convert so we send largest address byte first */
-	if (bytes_left > ARRAY_SIZE(buf)) {
-		dev_err(ctrl->dev, "Address too big: %d\n", bytes_left);
-	}
-	while (bytes_left) {
-		bytes_left--;
-		buf[bytes_left] = addr;
-		addr >>= 8;
-	}
-
-	ctrl->xfer.dir = QSPI_WRITE;
-	ctrl->xfer.buswidth = op->addr.buswidth;
-	ctrl->xfer.is_last = !(op->dummy.nbytes || op->data.nbytes);
-	ctrl->xfer.is_dummy = false;
-	ctrl->xfer.rem_bytes = op->addr.nbytes;
-	ctrl->xfer.tx_buf = buf;
-	qcom_qspi_pio_xfer(ctrl);
-
-	return wait_for_xfer(ctrl);
-}
-
-static int process_dummy(const struct spi_mem_op *op, struct qcom_qspi *ctrl)
-{
-	ctrl->xfer.dir = QSPI_WRITE;
-	ctrl->xfer.buswidth = op->dummy.buswidth;
-	ctrl->xfer.is_last = !op->data.nbytes;
-	ctrl->xfer.is_dummy = true;
-	ctrl->xfer.rem_bytes = op->dummy.nbytes;
-	qcom_qspi_pio_xfer(ctrl);
-
-	return wait_for_xfer(ctrl);
-}
-
-static int process_data(const struct spi_mem_op *op, struct qcom_qspi *ctrl)
-{
-	ctrl->xfer.dir = (op->data.dir == SPI_MEM_DATA_IN) ?
-					QSPI_READ : QSPI_WRITE;
-	ctrl->xfer.buswidth = op->data.buswidth;
-	ctrl->xfer.is_last = true;
-	ctrl->xfer.is_dummy = false;
-	ctrl->xfer.rem_bytes = op->data.nbytes;
-
-	if (ctrl->xfer.dir == QSPI_WRITE)
-		ctrl->xfer.tx_buf = op->data.buf.out;
-	else
-		ctrl->xfer.rx_buf = op->data.buf.in;
-	qcom_qspi_pio_xfer(ctrl);
-
-	return wait_for_xfer(ctrl);
-}
-
-static int qcom_qspi_exec_mem_op(struct spi_mem *mem,
-				const struct spi_mem_op *op)
-{
-	struct qcom_qspi *ctrl = spi_master_get_devdata(mem->spi->master);
-	struct spi_device *dev = mem->spi;
+	struct qcom_qspi *ctrl = spi_master_get_devdata(master);
 	int ret;
+	unsigned long speed_hz;
+	unsigned long flags;
 
-	if (dev->max_speed_hz) {
-		ret = clk_set_rate(ctrl->clks[QSPI_CLK_CORE].clk,
-				   dev->max_speed_hz * 4);
-		if (ret) {
-			dev_err(ctrl->dev, "Failed to set core clk %d\n", ret);
-			goto exit;
-		}
-	}
+	speed_hz = slv->max_speed_hz;
+	if (xfer->speed_hz)
+		speed_hz = xfer->speed_hz;
 
-	ret = clk_bulk_prepare_enable(QSPI_NUM_CLKS, ctrl->clks);
-	if (ret)
+	ret = clk_set_rate(ctrl->clks[QSPI_CLK_CORE].clk, speed_hz * 4);
+	if (ret) {
+		dev_err(ctrl->dev, "Failed to set core clk %d\n", ret);
 		return ret;
-
-	trace_printk("DOUG: %s: addr (%#08x): %#06x dummy: %#06x data: %#06x\n",
-		     __func__, op->addr.nbytes, (int) op->addr.val, op->dummy.nbytes, op->data.nbytes);
-
-	ret = process_opcode(op, ctrl);
-	if (ret)
-		return ret;
-
-	if (op->addr.nbytes) {
-		ret = process_addr(op, ctrl);
-		if (ret)
-			goto exit;
 	}
 
-	if (op->dummy.nbytes) {
-		ret = process_dummy(op, ctrl);
-		if (ret)
-			goto exit;
+	spin_lock_irqsave(&ctrl->lock, flags);
+
+	/* We are half duplex, so either rx or tx will be set */
+	if (xfer->rx_buf) {
+		ctrl->xfer.dir = QSPI_READ;
+		ctrl->xfer.buswidth = xfer->rx_nbits;
+		ctrl->xfer.rx_buf = xfer->rx_buf;
+	} else {
+		ctrl->xfer.dir = QSPI_WRITE;
+		ctrl->xfer.buswidth = xfer->tx_nbits;
+		ctrl->xfer.tx_buf = xfer->tx_buf;
 	}
+	ctrl->xfer.is_last = list_is_last(&xfer->transfer_list,
+					  &master->cur_msg->transfers);
+	ctrl->xfer.rem_bytes = xfer->len;
+	qcom_qspi_pio_xfer(ctrl);
 
-	if (op->data.nbytes) {
-		ret = process_data(op, ctrl);
-		if (ret)
-			goto exit;
-	}
+	spin_unlock_irqrestore(&ctrl->lock, flags);
 
-exit:
-	clk_bulk_disable_unprepare(QSPI_NUM_CLKS, ctrl->clks);
-
-	return ret;
+	/* We'll call spi_finalize_current_transfer() when done */
+	return 1;
 }
 
 static int qcom_qspi_setup(struct spi_device *spi)
 {
-	int ret;
 	u32 mstr_cfg;
 	struct qcom_qspi *ctrl;
-	int tx_data_oe_delay = 1;	/* TODO: ??? */
-	int tx_data_delay = 1;		/* TODO: ??? */
+	int tx_data_oe_delay = 1;
+	int tx_data_delay = 1;
+	int ret;
 
 	ctrl = spi_master_get_devdata(spi->master);
-
-	ret = clk_bulk_prepare_enable(QSPI_NUM_CLKS, ctrl->clks);
-	if (ret)
+	ret = pm_runtime_get_sync(ctrl->dev);
+	if (ret) {
+		dev_err(ctrl->dev, "Runtime PM get failed in setup: %d\n", ret);
+		pm_runtime_put(ctrl->dev);
 		return ret;
+	}
 
 	mstr_cfg = readl(ctrl->base + MSTR_CONFIG);
 	mstr_cfg &= ~CHIP_SELECT_NUM;
 	if (spi->chip_select)
 		mstr_cfg |= CHIP_SELECT_NUM;
 
-	/* TODO: Is Linux spi->mode the same format as our hardware expects? */
 	mstr_cfg = (mstr_cfg & ~SPI_MODE_MSK) | (spi->mode << SPI_MODE_SHFT);
 	mstr_cfg |= FB_CLK_EN | PIN_WPN | PIN_HOLDN | SBL_EN | FULL_CYCLE_MODE;
 	mstr_cfg |= (mstr_cfg & ~TX_DATA_OE_DELAY_MSK) |
@@ -393,9 +312,9 @@ static int qcom_qspi_setup(struct spi_device *spi)
 	 * Ensure that the configuration goes through by reading back
 	 * a register from the IO space.
 	 */
-	mstr_cfg = readl((ctrl->base + MSTR_CONFIG));
+	mstr_cfg = readl(ctrl->base + MSTR_CONFIG);
 
-	clk_bulk_disable_unprepare(QSPI_NUM_CLKS, ctrl->clks);
+	pm_runtime_put(ctrl->dev);
 
 	return 0;
 }
@@ -451,7 +370,6 @@ static irqreturn_t pio_read(struct qcom_qspi *ctrl)
 static irqreturn_t pio_write(struct qcom_qspi *ctrl)
 {
 	const void *xfer_buf = ctrl->xfer.tx_buf;
-	bool is_dummy = ctrl->xfer.is_dummy;
 	const int *word_buf;
 	const char *byte_buf;
 	unsigned int wr_fifo_bytes;
@@ -459,23 +377,18 @@ static irqreturn_t pio_write(struct qcom_qspi *ctrl)
 	unsigned int wr_size;
 	unsigned int rem_words;
 
-	wr_fifo_bytes =
-		readl(ctrl->base + PIO_XFER_STATUS) >> WR_FIFO_BYTES_SHFT;
+	wr_fifo_bytes = readl(ctrl->base + PIO_XFER_STATUS)
+				>> WR_FIFO_BYTES_SHFT;
 
 	if (ctrl->xfer.rem_bytes < QSPI_BYTES_PER_WORD) {
 		/* Process the last 1-3 bytes */
 		wr_size = min(wr_fifo_bytes, ctrl->xfer.rem_bytes);
 		ctrl->xfer.rem_bytes -= wr_size;
 
-		if (is_dummy) {
-			while (wr_size--)
-				writel(0xff, ctrl->base + PIO_DATAOUT_1B);
-		} else {
-			byte_buf = xfer_buf;
-			while (wr_size--)
-				writel(*byte_buf++,
-				       ctrl->base + PIO_DATAOUT_1B);
-		}
+		byte_buf = xfer_buf;
+		while (wr_size--)
+			writel(*byte_buf++,
+			       ctrl->base + PIO_DATAOUT_1B);
 		ctrl->xfer.tx_buf = byte_buf;
 	} else {
 		/*
@@ -489,15 +402,10 @@ static irqreturn_t pio_write(struct qcom_qspi *ctrl)
 		wr_size = min(rem_words, wr_fifo_words);
 		ctrl->xfer.rem_bytes -= wr_size * QSPI_BYTES_PER_WORD;
 
-		if (is_dummy) {
-			while (wr_size--)
-				writel(0xffffffff, ctrl->base + PIO_DATAOUT_1B);
-		} else {
-			word_buf = xfer_buf;
-			while (wr_size--)
-				writel(get_unaligned(word_buf++),
-				       ctrl->base + PIO_DATAOUT_4B);
-		}
+		word_buf = xfer_buf;
+		while (wr_size--)
+			writel(get_unaligned(word_buf++),
+			       ctrl->base + PIO_DATAOUT_4B);
 		ctrl->xfer.tx_buf = word_buf;
 
 	}
@@ -510,37 +418,29 @@ static irqreturn_t qcom_qspi_irq(int irq, void *dev_id)
 	u32 int_status;
 	struct qcom_qspi *ctrl = dev_id;
 	irqreturn_t ret;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctrl->lock, flags);
 
 	int_status = readl(ctrl->base + MSTR_INT_STATUS);
 	writel(int_status, ctrl->base + MSTR_INT_STATUS);
 
-	if ((int_status & WR_FIFO_EMPTY) && ctrl->xfer.dir == QSPI_WRITE)
-		ret = pio_write(ctrl);
-
-	if ((int_status & RESP_FIFO_RDY) && ctrl->xfer.dir == QSPI_READ)
-		ret = pio_read(ctrl);
+	if (ctrl->xfer.dir == QSPI_WRITE) {
+		if (int_status & WR_FIFO_EMPTY)
+			ret = pio_write(ctrl);
+	} else {
+		if (int_status & RESP_FIFO_RDY)
+			ret = pio_read(ctrl);
+	}
 
 	if (!ctrl->xfer.rem_bytes) {
 		writel(0, ctrl->base + MSTR_INT_EN);
-		complete(&ctrl->transfer_complete);
+		spi_finalize_current_transfer(dev_get_drvdata(ctrl->dev));
 	}
 
+	spin_unlock_irqrestore(&ctrl->lock, flags);
 	return ret;
 }
-
-static int qcom_qspi_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
-{
-	if (op->data.nbytes > REQUEST_COUNT_MSK) {
-		op->data.nbytes = REQUEST_COUNT_MSK;
-	}
-
-	return 0;
-}
-
-static const struct spi_controller_mem_ops qcom_qspi_mem_ops = {
-	.exec_op = qcom_qspi_exec_mem_op,
-	.adjust_op_size = qcom_qspi_adjust_op_size,
-};
 
 static int qcom_qspi_probe(struct platform_device *pdev)
 {
@@ -561,8 +461,8 @@ static int qcom_qspi_probe(struct platform_device *pdev)
 
 	ctrl = spi_master_get_devdata(master);
 
+	spin_lock_init(&ctrl->lock);
 	ctrl->dev = dev;
-	init_completion(&ctrl->transfer_complete);
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	ctrl->base = devm_ioremap(dev, res->start, resource_size(res));
 	if (IS_ERR(ctrl->base)) {
@@ -577,14 +477,12 @@ static int qcom_qspi_probe(struct platform_device *pdev)
 	if (ret)
 		goto exit_probe_master_put;
 
-	ctrl->irq = platform_get_irq(pdev, 0);
-	if (ctrl->irq < 0) {
-		ret = PTR_ERR(ctrl->base);
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0) {
 		dev_err(dev, "Failed to get irq %d\n", ret);
 		goto exit_probe_master_put;
 	}
-
-	ret = devm_request_irq(dev, ctrl->irq, qcom_qspi_irq,
+	ret = devm_request_irq(dev, ret, qcom_qspi_irq,
 			IRQF_TRIGGER_HIGH, dev_name(dev), ctrl);
 	if (ret) {
 		dev_err(dev, "Failed to request irq %d\n", ret);
@@ -595,17 +493,25 @@ static int qcom_qspi_probe(struct platform_device *pdev)
 	master->num_chipselect = QSPI_NUM_CS;
 	master->bus_num = pdev->id;
 	master->dev.of_node = pdev->dev.of_node;
-	master->mode_bits = SPI_MODE_0 | SPI_MODE_3 |
+	master->mode_bits = SPI_MODE_0 |
 			    SPI_TX_DUAL | SPI_RX_DUAL |
 			    SPI_TX_QUAD | SPI_RX_QUAD;
+	master->flags = SPI_MASTER_HALF_DUPLEX;
 	master->setup = qcom_qspi_setup;
-	master->mem_ops = &qcom_qspi_mem_ops;
+	master->transfer_one = qcom_qspi_transfer_one;
+	master->handle_err = qcom_qspi_handle_err;
+	master->auto_runtime_pm = true;
 
-	ret = devm_spi_register_master(dev, master);
-	if (!ret)
-		goto exit_probe_master_put;
+	pm_runtime_enable(dev);
+
+	ret = spi_register_master(master);
+	if (ret)
+		goto exit_probe_runtime_disable;
 
 	return 0;
+
+exit_probe_runtime_disable:
+	pm_runtime_disable(dev);
 
 exit_probe_master_put:
 	spi_master_put(master);
@@ -613,22 +519,76 @@ exit_probe_master_put:
 	return ret;
 }
 
-static int qcom_qspi_resume(struct device *dev)
+static int qcom_qspi_remove(struct platform_device *pdev)
 {
-	return spi_master_resume(dev_get_drvdata(dev));
+	struct spi_master *master = platform_get_drvdata(pdev);
+
+	/* Unregister _before_ disabling pm_runtime() so we stop transfers */
+	spi_unregister_master(master);
+
+	pm_runtime_disable(&pdev->dev);
+
+	return 0;
+}
+
+static int __maybe_unused qcom_qspi_runtime_suspend(struct device *dev)
+{
+	struct spi_master *master = dev_get_drvdata(dev);
+	struct qcom_qspi *ctrl = spi_master_get_devdata(master);
+
+	clk_bulk_disable_unprepare(QSPI_NUM_CLKS, ctrl->clks);
+
+	return 0;
+}
+
+static int __maybe_unused qcom_qspi_runtime_resume(struct device *dev)
+{
+	struct spi_master *master = dev_get_drvdata(dev);
+	struct qcom_qspi *ctrl = spi_master_get_devdata(master);
+
+	return clk_bulk_prepare_enable(QSPI_NUM_CLKS, ctrl->clks);
 }
 
 static int qcom_qspi_suspend(struct device *dev)
 {
-	return spi_master_suspend(dev_get_drvdata(dev));
+	struct spi_master *master = dev_get_drvdata(dev);
+	int ret;
+
+	ret = spi_master_suspend(master);
+	if (ret)
+		return ret;
+
+	ret = pm_runtime_force_suspend(dev);
+	if (ret)
+		spi_master_resume(master);
+
+	return ret;
+}
+
+static int qcom_qspi_resume(struct device *dev)
+{
+	struct spi_master *master = dev_get_drvdata(dev);
+	int ret;
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret)
+		return ret;
+
+	ret = spi_master_resume(master);
+	if (ret)
+		pm_runtime_force_suspend(dev);
+
+	return ret;
 }
 
 static const struct dev_pm_ops qcom_qspi_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(qcom_qspi_runtime_suspend,
+			   qcom_qspi_runtime_resume, NULL)
 	SET_SYSTEM_SLEEP_PM_OPS(qcom_qspi_suspend, qcom_qspi_resume)
 };
 
 static const struct of_device_id qcom_qspi_dt_match[] = {
-	{ .compatible = "qcom,qspi-v1", },
+	{ .compatible = "qcom,sdm845-qspi", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_qspi_dt_match);
@@ -640,6 +600,7 @@ static struct platform_driver qcom_qspi_driver = {
 		.of_match_table = qcom_qspi_dt_match,
 	},
 	.probe = qcom_qspi_probe,
+	.remove = qcom_qspi_remove,
 };
 module_platform_driver(qcom_qspi_driver);
 
