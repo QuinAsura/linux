@@ -185,6 +185,15 @@
 #define GCC_UFS_CLKREF_CLK					168
 #define GCC_PCIE_CLKREF_CLK					169
 #define GCC_RX1_USB2_CLKREF_CLK					170
+#define SYS_NOC_HS_AXI_CLK_SRC					171
+#define MSS_Q6_BIMC_AXI_CLK_SRC					172
+#define SYSTEM_NOC_CLK_SRC					173
+#define CONFIG_NOC_CLK_SRC					174
+#define GCC_MSS_GPLL0_DIV_CLK					175
+#define GCC_MSS_CFG_AHB_CLK					176
+#define GCC_BOOT_ROM_AHB_CLK					177
+#define GCC_MSS_SNOC_AXI_CLK					178
+#define GCC_MSS_MNOC_BIMC_AXI_CLK				179
 
 #define PCIE_0_GDSC						0
 #define UFS_GDSC						1
@@ -298,5 +307,6 @@
 #define GCC_MSMPU_BCR						105
 #define GCC_QUSB2PHY_PRIM_BCR					106
 #define GCC_QUSB2PHY_SEC_BCR					107
+#define GCC_MSS_RESTART						108
 
 #endif
