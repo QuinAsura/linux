@@ -19,7 +19,10 @@
 /* Resource types */
 #define RPMPD_SMPA 0x61706d73 /* smpa */
 #define RPMPD_LDOA 0x616f646c /* ldoa */
+#define RPMPD_RWCX 0x78637772 /* rwcx */
 #define RPMPD_RWMX 0x786d7772 /* rwmx */
+#define RPMPD_RWSC 0x63737772 /* rwsc */
+#define RPMPD_RWSM 0x6d737772 /* rwsm */
 #define RPMPD_RWLC 0x636c7772 /* rwlc */
 #define RPMPD_RWLM 0x6d6c7772 /* rwlm */
 
@@ -133,6 +136,37 @@ static const struct rpmpd_desc msm8996_desc = {
 	.num_pds = ARRAY_SIZE(msm8996_rpmpds),
 };
 
+/* msm8998 RPM Power domains */
+DEFINE_RPMPD_PAIR(msm8998, vddcx, vddcx_ao, RWCX, LEVEL, 0);
+DEFINE_RPMPD_VFL(msm8998, vddcx_vfl, RWCX, 0);
+
+DEFINE_RPMPD_PAIR(msm8998, vddmx, vddmx_ao, RWMX, LEVEL, 0);
+DEFINE_RPMPD_VFL(msm8998, vddmx_vfl, RWMX, 0);
+
+DEFINE_RPMPD_LEVEL(msm8998, vdd_ssccx, RWSC, 0);
+DEFINE_RPMPD_VFL(msm8998, vdd_ssccx_vfl, RWSC, 0);
+
+DEFINE_RPMPD_LEVEL(msm8998, vdd_sscmx, RWSM, 0);
+DEFINE_RPMPD_VFL(msm8998, vdd_sscmx_vfl, RWSM, 0);
+
+static struct rpmpd *msm8998_rpmpds[] = {
+	[MSM8998_VDDCX] =		&msm8998_vddcx,
+	[MSM8998_VDDCX_AO] =		&msm8998_vddcx_ao,
+	[MSM8998_VDDCX_VFL] =		&msm8998_vddcx_vfl,
+	[MSM8998_VDDMX] =		&msm8998_vddmx,
+	[MSM8998_VDDMX_AO] =		&msm8998_vddmx_ao,
+	[MSM8998_VDDMX_VFL] =		&msm8998_vddmx_vfl,
+	[MSM8998_SSCCX] =		&msm8998_vdd_ssccx,
+	[MSM8998_SSCCX_VFL] =		&msm8998_vdd_ssccx_vfl,
+	[MSM8998_SSCMX] =		&msm8998_vdd_sscmx,
+	[MSM8998_SSCMX_VFL] =		&msm8998_vdd_sscmx_vfl,
+};
+
+static const struct rpmpd_desc msm8998_desc = {
+	.rpmpds = msm8998_rpmpds,
+	.num_pds = ARRAY_SIZE(msm8998_rpmpds),
+};
+
 /* qcs404 RPM Power domains */
 DEFINE_RPMPD_PAIR(qcs404, vddmx, vddmx_ao, RWMX, LEVEL, 0);
 DEFINE_RPMPD_VFL(qcs404, vddmx_vfl, RWMX, 0);
@@ -160,6 +194,7 @@ static const struct rpmpd_desc qcs404_desc = {
 
 static const struct of_device_id rpmpd_match_table[] = {
 	{ .compatible = "qcom,msm8996-rpmpd", .data = &msm8996_desc },
+	{ .compatible = "qcom,msm8998-rpmpd", .data = &msm8998_desc },
 	{ .compatible = "qcom,qcs404-rpmpd", .data = &qcs404_desc },
 	{ }
 };
