@@ -16,6 +16,7 @@
 #include <linux/cpu.h>
 #include <linux/errno.h>
 #include <linux/device.h>
+#include <linux/interconnect.h>
 #include <linux/of_device.h>
 #include <linux/pm_domain.h>
 #include <linux/slab.h>
@@ -539,6 +540,45 @@ free_microvolt:
 	return ret;
 }
 
+static int opp_parse_icc_bw(struct dev_pm_opp *opp, struct device *dev,
+			    struct opp_table *opp_table)
+{
+	struct property *prop = NULL;
+	char name[NAME_MAX];
+	int count;
+	u32 avg = 0;
+	u32 peak = 0;
+
+	/* Search for "opp-bw-MBs" */
+	sprintf(name, "opp-bw-MBs");
+	prop = of_find_property(opp->np, name, NULL);
+
+	/* Missing property is not a problem */
+	if (!prop) {
+		dev_dbg(dev, "%s: Missing opp-bw-MBs\n", __func__);
+		return 0;
+	}
+
+	count = of_property_count_u32_elems(opp->np, name);
+	if (count != 2) {
+		dev_err(dev, "%s: Invalid number of elements in %s property\n",
+			__func__, name);
+		return -EINVAL;
+	}
+
+	opp->bandwidth = kzalloc(sizeof(*opp->bandwidth), GFP_KERNEL);
+	if (!opp->bandwidth)
+		return -ENOMEM;
+
+	of_property_read_u32_index(opp->np, name, 0, &avg);
+	of_property_read_u32_index(opp->np, name, 1, &peak);
+
+	opp->bandwidth->avg = MBps_to_icc(avg);
+	opp->bandwidth->peak = MBps_to_icc(peak);
+
+	return 0;
+}
+
 /**
  * dev_pm_opp_of_remove_table() - Free OPP table entries created from static DT
  *				  entries
@@ -629,6 +669,10 @@ static struct dev_pm_opp *_opp_add_static_v2(struct opp_table *opp_table,
 		new_opp->clock_latency_ns = val;
 
 	ret = opp_parse_supplies(new_opp, dev, opp_table);
+	if (ret)
+		goto free_required_opps;
+
+	ret = opp_parse_icc_bw(new_opp, dev, opp_table);
 	if (ret)
 		goto free_required_opps;
 

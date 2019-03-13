@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/export.h>
+#include <linux/interconnect.h>
 #include <linux/pm_domain.h>
 #include <linux/regulator/consumer.h>
 
@@ -1636,6 +1637,72 @@ void dev_pm_opp_put_clkname(struct opp_table *opp_table)
 	dev_pm_opp_put_opp_table(opp_table);
 }
 EXPORT_SYMBOL_GPL(dev_pm_opp_put_clkname);
+
+/**
+ * dev_pm_opp_set_path() - Set interconnect path for a device
+ * @dev: Device for which interconnect path is being set.
+ * @name: Interconnect path name or NULL.
+ *
+ * This must be called before any OPPs are initialized for the device.
+ */
+struct opp_table *dev_pm_opp_set_path(struct device *dev, const char *name)
+{
+	struct opp_table *opp_table;
+	int ret;
+
+	opp_table = dev_pm_opp_get_opp_table(dev);
+	if (!opp_table)
+		return ERR_PTR(-ENOMEM);
+
+	/* This should be called before OPPs are initialized */
+	if (WARN_ON(!list_empty(&opp_table->opp_list))) {
+		ret = -EBUSY;
+		goto err;
+	}
+
+	/* Another CPU that shares the OPP table has set the path */
+	if (opp_table->path)
+		return opp_table;
+
+	/* Find interconnect path for the device */
+	opp_table->path = of_icc_get(dev, name);
+	if (IS_ERR(opp_table->path)) {
+		ret = PTR_ERR(opp_table->clk);
+		if (ret != -EPROBE_DEFER) {
+			dev_err(dev, "%s: Couldn't find path: %d\n", __func__,
+				ret);
+		}
+		goto err;
+	}
+
+	return opp_table;
+
+err:
+	dev_pm_opp_put_opp_table(opp_table);
+
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_set_path);
+
+/**
+ * dev_pm_opp_put_path() - Release interconnect path resources
+ * @opp_table: OPP table returned from dev_pm_opp_set_path().
+ */
+void dev_pm_opp_put_path(struct opp_table *opp_table)
+{
+	if (!opp_table->path)
+		goto put_opp_table;
+
+	/* Make sure there are no concurrent readers while updating opp_table */
+	WARN_ON(!list_empty(&opp_table->opp_list));
+
+	icc_put(opp_table->path);
+	opp_table->path = NULL;
+
+put_opp_table:
+	dev_pm_opp_put_opp_table(opp_table);
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_put_path);
 
 /**
  * dev_pm_opp_register_set_opp_helper() - Register custom set OPP helper

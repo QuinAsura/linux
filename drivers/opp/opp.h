@@ -24,6 +24,7 @@
 
 struct clk;
 struct regulator;
+struct icc_path;
 
 /* Lock to allow exclusive modification to the device and opp lists */
 extern struct mutex opp_table_lock;
@@ -62,6 +63,7 @@ extern struct list_head opp_tables;
  * @rate:	Frequency in hertz
  * @level:	Performance level
  * @supplies:	Power supplies voltage/current values
+ * @bandwidth:	Interconnect bandwidth values
  * @clock_latency_ns: Latency (in nanoseconds) of switching to this OPP's
  *		frequency from any other OPP's frequency.
  * @required_opps: List of OPPs that are required by this OPP.
@@ -84,6 +86,8 @@ struct dev_pm_opp {
 	unsigned int level;
 
 	struct dev_pm_opp_supply *supplies;
+
+	struct dev_pm_opp_icc_bw *bandwidth;
 
 	unsigned long clock_latency_ns;
 
@@ -152,6 +156,7 @@ enum opp_table_access {
  * property).
  * @genpd_performance_state: Device's power domain support performance state.
  * @is_genpd: Marks if the OPP table belongs to a genpd.
+ * @path: Interconnect path handle
  * @set_opp: Platform specific set_opp callback
  * @set_opp_data: Data to be passed to set_opp callback
  * @dentry:	debugfs dentry pointer of the real device directory (not links).
@@ -196,6 +201,7 @@ struct opp_table {
 	int regulator_count;
 	bool genpd_performance_state;
 	bool is_genpd;
+	struct icc_path *path;
 
 	int (*set_opp)(struct dev_pm_set_opp_data *data);
 	struct dev_pm_set_opp_data *set_opp_data;
