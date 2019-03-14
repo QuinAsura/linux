@@ -150,6 +150,44 @@ unsigned int dev_pm_opp_get_level(struct dev_pm_opp *opp)
 EXPORT_SYMBOL_GPL(dev_pm_opp_get_level);
 
 /**
+ * dev_pm_opp_get_avg_bw() - Gets the average bandwidth corresponding to an
+ * available opp
+ * @opp:	opp for which average bandwidth has to be returned for
+ *
+ * Return: average bandwidth read from device tree corresponding to the
+ * opp, else return 0.
+ */
+unsigned int dev_pm_opp_get_avg_bw(struct dev_pm_opp *opp)
+{
+	if (IS_ERR_OR_NULL(opp) || !opp->available) {
+		pr_err("%s: Invalid parameters\n", __func__);
+		return 0;
+	}
+
+	return opp->bandwidth->avg;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_get_avg_bw);
+
+/**
+ * dev_pm_opp_get_peak_bw() - Gets the peak bandwidth corresponding to an
+ * available opp
+ * @opp:	opp for which peak bandwidth has to be returned for
+ *
+ * Return: peak bandwidth read from device tree corresponding to the
+ * opp, else return 0.
+ */
+unsigned int dev_pm_opp_get_peak_bw(struct dev_pm_opp *opp)
+{
+	if (IS_ERR_OR_NULL(opp) || !opp->available) {
+		pr_err("%s: Invalid parameters\n", __func__);
+		return 0;
+	}
+
+	return opp->bandwidth->peak;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_get_peak_bw);
+
+/**
  * dev_pm_opp_is_turbo() - Returns if opp is turbo OPP or not
  * @opp: opp for which turbo mode is being verified
  *
