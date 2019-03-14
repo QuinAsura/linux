@@ -73,6 +73,25 @@ static unsigned int qcom_cpufreq_hw_fast_switch(struct cpufreq_policy *policy,
 	return policy->freq_table[index].frequency;
 }
 
+static int qcom_find_update_opp(struct device *cpu_dev, unsigned long freq,
+				unsigned long volt)
+{
+	int ret;
+	struct dev_pm_opp *opp;
+
+	opp = dev_pm_opp_find_freq_exact(cpu_dev, freq, true);
+	if (IS_ERR(opp)) {
+		ret = dev_pm_opp_add(cpu_dev, freq, volt);
+	} else {
+		dev_pm_opp_disable(cpu_dev, freq);
+		ret = dev_pm_opp_update_voltage(cpu_dev, freq, volt);
+		dev_pm_opp_enable(cpu_dev, freq);
+		dev_pm_opp_put(opp);
+	}
+
+	return ret;
+}
+
 static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 				    struct cpufreq_policy *policy,
 				    void __iomem *base)
@@ -81,10 +100,15 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 	u32 volt;
 	unsigned int max_cores = cpumask_weight(policy->cpus);
 	struct cpufreq_frequency_table	*table;
+	int ret;
 
 	table = kcalloc(LUT_MAX_ENTRIES + 1, sizeof(*table), GFP_KERNEL);
 	if (!table)
 		return -ENOMEM;
+
+	ret = dev_pm_opp_of_add_table(cpu_dev);
+	if (ret)
+		dev_dbg(cpu_dev, "Couldn't add OPP table\n");
 
 	for (i = 0; i < LUT_MAX_ENTRIES; i++) {
 		data = readl_relaxed(base + REG_FREQ_LUT +
@@ -104,7 +128,7 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 
 		if (freq != prev_freq && core_count == max_cores) {
 			table[i].frequency = freq;
-			dev_pm_opp_add(cpu_dev, freq * 1000, volt);
+			qcom_find_update_opp(cpu_dev, freq * 1000, volt);
 			dev_dbg(cpu_dev, "index=%d freq=%d, core_count %d\n", i,
 				freq, core_count);
 		} else {
@@ -125,7 +149,8 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 			if (prev_cc != max_cores) {
 				prev->frequency = prev_freq;
 				prev->flags = CPUFREQ_BOOST_FREQ;
-				dev_pm_opp_add(cpu_dev,	prev_freq * 1000, volt);
+				qcom_find_update_opp(cpu_dev, prev_freq * 1000,
+						     volt);
 			}
 
 			break;
