@@ -6,6 +6,7 @@
 #include <linux/bitfield.h>
 #include <linux/cpufreq.h>
 #include <linux/init.h>
+#include <linux/interconnect.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -28,8 +29,214 @@
 #define REG_VOLT_LUT			0x114
 #define REG_PERF_STATE			0x920
 
+#define QCOM_ICC_TAG_ACTIVE_ONLY	1
+
 static unsigned long cpu_hw_rate, xo_rate;
 static struct platform_device *global_pdev;
+static struct cpufreq_hw_data *cpufreq_data;
+
+struct cpufreq_hw_icc_res {
+	const char *icc_path_name;
+	int freq_domain;
+	u32 tag;
+	struct opp_table *opp_table;
+	struct icc_path *path;
+};
+
+struct cpufreq_hw_state {
+	int index;
+	struct device *dev;
+	struct opp_table *opp_table;
+};
+
+struct cpufreq_hw_data {
+	struct cpufreq_hw_icc_res *icc_res;
+	struct cpufreq_hw_state state[NR_CPUS];
+};
+
+struct cpufreq_hw_desc {
+	struct cpufreq_hw_icc_res *data;
+	size_t num_paths;
+};
+
+static struct cpufreq_hw_icc_res sc7180_icc_res[] = {
+	{
+		.tag = QCOM_ICC_TAG_ACTIVE_ONLY,
+		.freq_domain = 0,
+		.icc_path_name = "cpu0-ddr",
+		.path = NULL,
+	},
+	{
+		.tag = QCOM_ICC_TAG_ACTIVE_ONLY,
+		.freq_domain = 1,
+		.icc_path_name = "cpu6-ddr",
+		.path = NULL,
+	},
+	{
+		.tag = 0,
+		.freq_domain = 0,
+		.icc_path_name = "cpu0-l3",
+		.path = NULL,
+	},
+	{
+		.tag = 0,
+		.freq_domain = 1,
+		.icc_path_name = "cpu6-l3",
+		.path = NULL,
+	},
+};
+
+static const struct cpufreq_hw_desc sc7180_desc = {
+	.data = sc7180_icc_res,
+	.num_paths = ARRAY_SIZE(sc7180_icc_res),
+};
+
+static struct cpufreq_hw_icc_res sdm845_icc_res[] = {
+	{
+		.tag = QCOM_ICC_TAG_ACTIVE_ONLY,
+		.freq_domain = 0,
+		.icc_path_name = "cpu0-ddr",
+		.path = NULL,
+	},
+	{
+		.tag = QCOM_ICC_TAG_ACTIVE_ONLY,
+		.freq_domain = 1,
+		.icc_path_name = "cpu4-ddr",
+		.path = NULL,
+	},
+	{
+		.tag = 0,
+		.freq_domain = 0,
+		.icc_path_name = "cpu0-l3",
+		.path = NULL,
+	},
+	{
+		.tag = 0,
+		.freq_domain = 1,
+		.icc_path_name = "cpu4-l3",
+		.path = NULL,
+	},
+};
+
+static const struct cpufreq_hw_desc sdm845_desc = {
+	.data = sdm845_icc_res,
+	.num_paths = ARRAY_SIZE(sdm845_icc_res),
+};
+
+static int qcom_cpufreq_update_opp(struct device *cpu_dev,
+				   unsigned long freq_khz,
+				   unsigned long volt)
+{
+	unsigned long freq_hz = freq_khz * 1000;
+
+	if (dev_pm_opp_update_voltage(cpu_dev, freq_hz, volt))
+		return dev_pm_opp_add(cpu_dev, freq_hz, volt);
+
+	/* Enable the opp after voltage update*/
+	return dev_pm_opp_enable(cpu_dev, freq_hz);
+}
+
+static int qcom_cpufreq_hw_icc_init(struct platform_device *pdev)
+{
+	const struct cpufreq_hw_desc *desc;
+	struct cpufreq_hw_icc_res *res;
+	int ret;
+	int i;
+
+	desc = of_device_get_match_data(&pdev->dev);
+	if (!desc)
+		return 0;
+
+	cpufreq_data = devm_kzalloc(&pdev->dev, sizeof(*cpufreq_data),
+				    GFP_KERNEL);
+	if (!cpufreq_data)
+		return -ENOMEM;
+
+	cpufreq_data->icc_res = desc->data;
+
+	for (i = 0; i < desc->num_paths; i++) {
+		res = &cpufreq_data->icc_res[i];
+
+		res->path = of_icc_get(&pdev->dev, res->icc_path_name);
+		if (IS_ERR(res->path)) {
+			dev_err(&pdev->dev, "ICC get failed for index %d: %ld\n",
+				i, PTR_ERR(res->path));
+			return PTR_ERR(res->path);
+		}
+
+		icc_set_tag(res->path, res->tag);
+		ret = dev_pm_opp_of_add_table_indexed(&pdev->dev, i);
+		if (ret) {
+			icc_put(res->path);
+			dev_err(&pdev->dev, "Failed to add OPP table for index %d: %d\n",
+				i, ret);
+			goto err;
+		}
+
+		/* TODO remove opp table indexed */
+		res->opp_table = dev_pm_opp_get_opp_table_indexed(&pdev->dev, i);
+		if (!res->opp_table) {
+			icc_put(res->path);
+			dev_err(&pdev->dev, "Failed to get OPP table for index %d\n", i);
+			goto err;
+		}
+	}
+
+	return 0;
+err:
+	for (i--; i >= 0; i--) {
+		res = &cpufreq_data->icc_res[i];
+		dev_pm_opp_put_opp_table(res->opp_table);
+		icc_put(res->path);
+	}
+
+	return ret;
+}
+
+static void qcom_cpufreq_hw_icc_remove(struct platform_device *pdev)
+{
+	struct cpufreq_hw_icc_res *res;
+	int i;
+
+	for (i = 0; cpufreq_data->icc_res[i].path; i++) {
+		res = &cpufreq_data->icc_res[i];
+		dev_pm_opp_put_opp_table(res->opp_table);
+		icc_put(res->path);
+	}
+}
+
+static void qcom_cpufreq_hw_icc_set(unsigned int cpu, unsigned long freq)
+{
+	unsigned long freq_hz = freq * 1000;
+	struct dev_pm_opp *cpu_opp, *opp;
+	struct cpufreq_hw_icc_res *res;
+	unsigned long peak_bw, avg_bw;
+	int i;
+
+	cpu_opp = dev_pm_opp_find_freq_exact(cpufreq_data->state[cpu].dev,
+					     freq_hz, true);
+	if (IS_ERR_OR_NULL(cpu_opp))
+		return;
+
+	for (i = 0; cpufreq_data->icc_res[i].path; i++) {
+		res = &cpufreq_data->icc_res[i];
+
+		if (res->freq_domain != cpufreq_data->state[cpu].index)
+			continue;
+
+		opp = dev_pm_opp_xlate_required_opp(cpufreq_data->state[cpu].opp_table,
+						    res->opp_table,
+						    cpu_opp);
+		if (IS_ERR_OR_NULL(opp))
+			continue;
+
+		peak_bw = dev_pm_opp_get_bw(opp, &avg_bw);
+		dev_pm_opp_put(opp);
+
+		icc_set_bw(res->path, avg_bw, peak_bw);
+	}
+	dev_pm_opp_put(cpu_opp);
+}
 
 static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 					unsigned int index)
@@ -38,6 +245,9 @@ static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 	unsigned long freq = policy->freq_table[index].frequency;
 
 	writel_relaxed(index, perf_state_reg);
+
+	if (cpufreq_data)
+		qcom_cpufreq_hw_icc_set(policy->cpu, freq);
 
 	arch_set_freq_scale(policy->related_cpus, freq,
 			    policy->cpuinfo.max_freq);
@@ -88,11 +298,27 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 {
 	u32 data, src, lval, i, core_count, prev_freq = 0, freq;
 	u32 volt;
+	u64 rate;
 	struct cpufreq_frequency_table	*table;
+	struct device_node *opp_table_np, *np;
+	int ret;
 
 	table = kcalloc(LUT_MAX_ENTRIES + 1, sizeof(*table), GFP_KERNEL);
 	if (!table)
 		return -ENOMEM;
+
+	ret = dev_pm_opp_of_add_table(cpu_dev);
+	if (!ret) {
+		/* Disable all opps and cross-validate against LUT */
+		opp_table_np = dev_pm_opp_of_get_opp_desc_node(cpu_dev);
+		for_each_available_child_of_node(opp_table_np, np) {
+			ret = of_property_read_u64(np, "opp-hz", &rate);
+			dev_pm_opp_disable(cpu_dev, rate);
+		}
+		of_node_put(opp_table_np);
+	} else {
+		dev_err(cpu_dev, "Couldn't add OPP table from dt\n");
+	}
 
 	for (i = 0; i < LUT_MAX_ENTRIES; i++) {
 		data = readl_relaxed(base + REG_FREQ_LUT +
@@ -112,7 +338,7 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 
 		if (freq != prev_freq && core_count != LUT_TURBO_IND) {
 			table[i].frequency = freq;
-			dev_pm_opp_add(cpu_dev, freq * 1000, volt);
+			qcom_cpufreq_update_opp(cpu_dev, freq, volt);
 			dev_dbg(cpu_dev, "index=%d freq=%d, core_count %d\n", i,
 				freq, core_count);
 		} else if (core_count == LUT_TURBO_IND) {
@@ -133,7 +359,8 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 			if (prev->frequency == CPUFREQ_ENTRY_INVALID) {
 				prev->frequency = prev_freq;
 				prev->flags = CPUFREQ_BOOST_FREQ;
-				dev_pm_opp_add(cpu_dev,	prev_freq * 1000, volt);
+				qcom_cpufreq_update_opp(cpu_dev, prev_freq,
+							volt);
 			}
 
 			break;
@@ -240,7 +467,14 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 
 	dev_pm_opp_of_register_em(policy->cpus);
 
-	policy->fast_switch_possible = true;
+	/* cache cpu device and opp table */
+	if (!cpufreq_data) {
+		policy->fast_switch_possible = true;
+	} else {
+		cpufreq_data->state[policy->cpu].index = index;
+		cpufreq_data->state[policy->cpu].dev = cpu_dev;
+		cpufreq_data->state[policy->cpu].opp_table = dev_pm_opp_get_opp_table(cpu_dev);
+	}
 
 	return 0;
 error:
@@ -301,6 +535,10 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 	global_pdev = pdev;
 
+	ret = qcom_cpufreq_hw_icc_init(pdev);
+	if (ret)
+		return ret;
+
 	ret = cpufreq_register_driver(&cpufreq_qcom_hw_driver);
 	if (ret)
 		dev_err(&pdev->dev, "CPUFreq HW driver failed to register\n");
@@ -312,10 +550,15 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 static int qcom_cpufreq_hw_driver_remove(struct platform_device *pdev)
 {
+	if (cpufreq_data)
+		qcom_cpufreq_hw_icc_remove(pdev);
+
 	return cpufreq_unregister_driver(&cpufreq_qcom_hw_driver);
 }
 
 static const struct of_device_id qcom_cpufreq_hw_match[] = {
+	{ .compatible = "qcom,sc7180-cpufreq-hw", .data = &sc7180_desc},
+	{ .compatible = "qcom,sdm845-cpufreq-hw", .data = &sdm845_desc},
 	{ .compatible = "qcom,cpufreq-hw" },
 	{}
 };
