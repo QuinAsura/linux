@@ -1,0 +1,146 @@
+Interconnect bandwidth device
+
+icbw is a device that represents an interconnect path that connects two
+devices. This device is typically used to vote for BW requirements between
+two devices. Eg: CPU to DDR, GPU to DDR, etc. This device is expected to
+use passive govenor by default.
+
+Required properties:
+- compatible:		Must be "devfreq-icbw"
+- interconnects:	Pairs of phandles and interconnect provider specifier
+			to denote the edge source and destination ports of
+			the interconnect path. See also:
+		Documentation/devicetree/bindings/interconnect/interconnect.txt
+- operating-points-v2:	A phandle to an OPP v2 table that holds frequency,
+			bandwidth values (in MB/s) and required-opp's populated
+			with phandles pointing to the required per cpu opp. The
+			bandwidth (in MB/s) values depend on multiple properties
+			of the interconnect path like frequency, interconnect
+			width, etc.
+
+Example:
+
+cpus {
+	...
+
+	CPU0: cpu@0 {
+		...
+		operating-points-v2 = <&cpu0_opp_table>;
+		...
+	};
+
+	CPU1: cpu@100 {
+		...
+		operating-points-v2 = <&cpu0_opp_table>;
+		...
+	};
+
+	CPU2: cpu@200 {
+		...
+		operating-points-v2 = <&cpu0_opp_table>;
+		...
+	};
+
+	CPU3: cpu@300 {
+		...
+		operating-points-v2 = <&cpu0_opp_table>;
+		...
+	};
+
+	CPU4: cpu@400 {
+		...
+		operating-points-v2 = <&cpu4_opp_table>;
+		...
+	};
+
+	CPU5: cpu@500 {
+		...
+		operating-points-v2 = <&cpu4_opp_table>;
+		...
+	};
+
+	CPU6: cpu@600 {
+		...
+		operating-points-v2 = <&cpu4_opp_table>;
+		...
+	};
+
+	CPU7: cpu@700 {
+		...
+		operating-points-v2 = <&cpu4_opp_table>;
+		...
+	};
+};
+
+cpu0_opp_table: cpu0_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	cpu0_opp1: opp-300000000 {
+		opp-hz = /bits/ 64 <300000000>;
+	};
+
+	...
+
+	cpu0_opp16: opp-1612800000 {
+		opp-hz = /bits/ 64 <1612800000>;
+	};
+
+	...
+};
+
+cpu4_opp_table: cpu4_opp_table {
+	compatible = "operating-points-v2";
+	opp-shared;
+
+	...
+
+	cpu4_opp4: opp-1056000000 {
+		opp-hz = /bits/ 64 <1056000000>;
+	};
+
+	cpu4_opp5: opp-1209600000 {
+		opp-hz = /bits/ 64 <1209600000>;
+	};
+
+	...
+};
+
+bw_opp_table: bw-opp-table {
+	compatible = "operating-points-v2";
+
+	opp-200  {
+		opp-hz = /bits/ 64 < 200000000 >; /* 200 MHz */
+		required-opps = <&cpu0_opp1>;
+		/* 0 MB/s average and 762 MB/s peak bandwidth */
+		opp-bw-MBs = <0 762>;
+	};
+
+	opp-300 {
+		opp-hz = /bits/ 64 < 300000000 >; /* 300 MHz */
+		/* 0 MB/s average and 1144 MB/s peak bandwidth */
+		opp-bw-MBs = <0 1144>;
+	};
+
+	...
+
+	opp-768 {
+		opp-hz = /bits/ 64 < 768000000 >; /* 768 MHz */
+		/* 0 MB/s average and 2929 MB/s peak bandwidth */
+		opp-bw-MBs = <0 2929>;
+		required-opps = <&cpu4_opp4>;
+	};
+
+	opp-1017 {
+		opp-hz = /bits/ 64 < 1017000000 >; /* 1017 MHz */
+		/* 0 MB/s average and 3879 MB/s peak bandwidth */
+		opp-bw-MBs = <0 3879>;
+		required-opps = <&cpu0_opp16>, <&cpu4_opp5>;
+	};
+};
+
+cpubw {
+	compatible = "devfreq-icbw";
+	interconnects = <&snoc MASTER_APSS_1 &bimc SLAVE_EBI_CH0>;
+	operating-points-v2 = <&bw_opp_table>;
+};
