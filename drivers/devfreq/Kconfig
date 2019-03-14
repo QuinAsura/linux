@@ -117,6 +117,21 @@ config ARM_RK3399_DMC_DEVFREQ
           It sets the frequency for the memory controller and reads the usage counts
           from hardware.
 
+config DEVFREQ_ICBW
+	tristate "Driver for making bandwidth votes on interconnect paths"
+	select DEVFREQ_GOV_PASSIVE
+	select DEVFREQ_GOV_PERFORMANCE
+	select DEVFREQ_GOV_POWERSAVE
+	select DEVFREQ_GOV_USERSPACE
+	depends on INTERCONNECT
+	default n
+	help
+	  Different devfreq governors use this devfreq device to make
+	  bandwidth votes for interconnect paths between different devices
+	  (Eg: CPU to DDR, GPU to DDR, etc). This driver provides a generic
+	  interface so that the devfreq governors can be shared across SoCs
+	  and architectures.
+
 source "drivers/devfreq/event/Kconfig"
 
 endif # PM_DEVFREQ
