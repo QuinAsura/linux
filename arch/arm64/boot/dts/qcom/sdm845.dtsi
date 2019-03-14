@@ -429,6 +429,122 @@
 		interrupts = <GIC_PPI 5 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
+	cpubw: cpu-icbw {
+		compatible = "devfreq-icbw";
+		interconnects = <&rsc_hlos MASTER_APPSS_PROC &rsc_hlos SLAVE_EBI1>;
+		operating-points-v2 = <&bw_opp_table>;
+	};
+
+	osm_l3_bw: osm-l3-icbw {
+		compatible = "devfreq-icbw";
+		interconnects = <&osm_l3 MASTER_OSM_L3_APPS &osm_l3 SLAVE_OSM_L3>;
+		operating-points-v2 = <&l3_opp_table>;
+	};
+
+	bw_opp_table: bw-opp-table {
+		compatible = "operating-points-v2";
+
+		bw_opp1: opp-200  {
+			opp-peak-KBps =/bits/ 64 < 762000 >;
+		};
+
+		bw_opp2: opp-300 {
+			opp-peak-KBps = /bits/ 64 < 1144000 >; /* 300 MHz */
+		};
+
+		bw_opp3: opp-451 {
+			opp-peak-KBps = /bits/ 64 < 1720000 >; /* 451 MHz */
+		};
+
+		bw_opp4: opp-547 {
+			opp-peak-KBps = /bits/ 64 < 2086000 >; /* 547 MHz */
+		};
+
+		bw_opp5: opp-681 {
+			opp-peak-KBps = /bits/ 64 < 2597000 >; /* 681 MHz */
+		};
+
+		bw_opp6: opp-768 {
+			opp-peak-KBps = /bits/ 64 < 2929000 >; /* 768 MHz */
+		};
+
+		bw_opp7: opp-1017 {
+			opp-peak-KBps = /bits/ 64 < 3879000 >; /* 1017 MHz */
+		};
+
+		bw_opp8: opp-1296 {
+			opp-peak-KBps = /bits/ 64 < 4893000 >; /* 1296 MHz */
+		};
+
+		bw_opp9: opp-1555 {
+			opp-peak-KBps = /bits/ 64 < 5931000 >; /* 1555 MHz */
+		};
+
+		bw_opp10: opp-1804 {
+			opp-peak-KBps = /bits/ 64 < 6881000 >; /* 1804 MHz */
+		};
+	};
+
+	l3_opp_table: l3-opp-table {
+		compatible = "operating-points-v2";
+
+		l3_opp1: opp-300000000 {
+			opp-peak-KBps = /bits/ 64 <4800000>;
+		};
+
+		l3_opp2: opp-403200000 {
+			opp-peak-KBps = /bits/ 64 <6451200>;
+		};
+
+		l3_opp3: opp-480000000 {
+			opp-peak-KBps = /bits/ 64 <7680000>;
+		};
+
+		l3_opp4: opp-576000000 {
+			opp-peak-KBps = /bits/ 64 <9216000>;
+		};
+
+		l3_opp5: opp-652800000 {
+			opp-peak-KBps = /bits/ 64 <10444800>;
+		};
+
+		l3_opp6: opp-748800000 {
+			opp-peak-KBps = /bits/ 64 <11980800>;
+		};
+
+		l3_opp7: opp-844800000 {
+			opp-peak-KBps = /bits/ 64 <13516800>;
+		};
+
+		l3_opp8: opp-940800000 {
+			opp-peak-KBps = /bits/ 64 <15052800>;
+		};
+
+		l3_opp9: opp-1036800000 {
+			opp-peak-KBps = /bits/ 64 <16588800>;
+		};
+
+		l3_opp10: opp-1132800000 {
+			opp-peak-KBps = /bits/ 64 <18124800>;
+		};
+
+		l3_opp11: opp-1209600000 {
+			opp-peak-KBps = /bits/ 64 <19353600>;
+		};
+
+		l3_opp12: opp-1305600000 {
+			opp-peak-KBps = /bits/ 64 <20889600>;
+		};
+
+		l3_opp13: opp-1401600000 {
+			opp-peak-KBps = /bits/ 64 <22425600>;
+		};
+
+		l3_opp14: opp-1478400000 {
+			opp-peak-KBps = /bits/ 64 <23654400>;
+		};
+	};
+
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupts = <GIC_PPI 1 IRQ_TYPE_LEVEL_LOW>,
