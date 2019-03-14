@@ -11,6 +11,7 @@
 #include <dt-bindings/clock/qcom,lpass-sdm845.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
 #include <dt-bindings/clock/qcom,videocc-sdm845.h>
+#include <dt-bindings/interconnect/qcom,sdm845.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/phy/phy-qcom-qusb2.h>
 #include <dt-bindings/power/qcom-aoss-qmp.h>
@@ -486,6 +487,85 @@
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupts = <GIC_PPI 5 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	cpubw: cpu-icbw {
+		compatible = "devfreq-icbw";
+		interconnects = <&rsc_hlos MASTER_APPSS_PROC &rsc_hlos SLAVE_EBI1>;
+		operating-points-v2 = <&bw_opp_table>;
+	};
+
+	bw_opp_table: bw-opp-table {
+		compatible = "operating-points-v2";
+
+		opp-200  {
+			opp-hz = /bits/ 64 < 200000000 >; /* 200 MHz */
+			required-opps = <&cpu0_opp1>;
+			/* 0 MB/s average and 762 MB/s peak bandwidth */
+			opp-bw-MBs = <0 762>;
+		};
+
+		opp-300 {
+			opp-hz = /bits/ 64 < 300000000 >; /* 300 MHz */
+			/* 0 MB/s average and 1144 MB/s peak bandwidth */
+			opp-bw-MBs = <0 1144>;
+		};
+
+		opp-451 {
+			opp-hz = /bits/ 64 < 451000000 >; /* 451 MHz */
+			/* 0 MB/s average and 1720 MB/s peak bandwidth */
+			opp-bw-MBs = <0 1720>;
+			required-opps = <&cpu0_opp6>;
+		};
+
+		opp-547 {
+			opp-hz = /bits/ 64 < 547000000 >; /* 547 MHz */
+			/* 0 MB/s average and 2086 MB/s peak bandwidth */
+			opp-bw-MBs = <0 2086>;
+			required-opps = <&cpu0_opp11>;
+		};
+
+		opp-681 {
+			opp-hz = /bits/ 64 < 681000000 >; /* 681 MHz */
+			/* 0 MB/s average and 2597 MB/s peak bandwidth */
+			opp-bw-MBs = <0 2597>;
+			required-opps = <&cpu0_opp15>;
+		};
+
+		opp-768 {
+			opp-hz = /bits/ 64 < 768000000 >; /* 768 MHz */
+			/* 0 MB/s average and 2929 MB/s peak bandwidth */
+			opp-bw-MBs = <0 2929>;
+			required-opps = <&cpu4_opp4>;
+		};
+
+		opp-1017 {
+			opp-hz = /bits/ 64 < 1017000000 >; /* 1017 MHz */
+			/* 0 MB/s average and 3879 MB/s peak bandwidth */
+			opp-bw-MBs = <0 3879>;
+			required-opps = <&cpu0_opp16>, <&cpu4_opp5>;
+		};
+
+		opp-1296 {
+			opp-hz = /bits/ 64 < 1296000000 >; /* 1296 MHz */
+			/* 0 MB/s average and 4943 MB/s peak bandwidth */
+			opp-bw-MBs = <0 4943>;
+			required-opps = <&cpu4_opp10>;
+		};
+
+		opp-1555 {
+			opp-hz = /bits/ 64 < 1555000000 >; /* 1555 MHz */
+			/* 0 MB/s average and 5931 MB/s peak bandwidth */
+			opp-bw-MBs = <0 5931>;
+			required-opps = <&cpu4_opp12>;
+		};
+
+		opp-1804 {
+			opp-hz = /bits/ 64 < 1804000000 >; /* 1804 MHz */
+			/* 0 MB/s average and 6881 MB/s peak bandwidth */
+			opp-bw-MBs = <0 6881>;
+			required-opps = <&cpu4_opp15>;
+		};
 	};
 
 	timer {
