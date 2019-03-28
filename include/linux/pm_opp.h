@@ -127,6 +127,9 @@ int dev_pm_opp_enable(struct device *dev, unsigned long freq);
 
 int dev_pm_opp_disable(struct device *dev, unsigned long freq);
 
+int dev_pm_opp_update_voltage(struct device *dev, unsigned long freq,
+			      unsigned long u_volt);
+
 int dev_pm_opp_register_notifier(struct device *dev, struct notifier_block *nb);
 int dev_pm_opp_unregister_notifier(struct device *dev, struct notifier_block *nb);
 
@@ -254,6 +257,13 @@ static inline int dev_pm_opp_enable(struct device *dev, unsigned long freq)
 }
 
 static inline int dev_pm_opp_disable(struct device *dev, unsigned long freq)
+{
+	return 0;
+}
+
+static inline int dev_pm_opp_update_voltage(struct device *dev,
+					    unsigned long freq,
+					    unsigned long u_volt)
 {
 	return 0;
 }
