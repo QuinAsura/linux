@@ -2504,6 +2504,61 @@ int dev_pm_opp_disable(struct device *dev, unsigned long freq)
 EXPORT_SYMBOL_GPL(dev_pm_opp_disable);
 
 /**
+ * dev_pm_opp_update_voltage() - Find and update voltage
+ * @dev:	device for which we do this operation
+ * @freq:	OPP frequency to update voltage
+ * @u_volt:	voltage requested for this opp
+ *
+ * Find and update voltage of a disabled opp corresponding to the given
+ * frequency. This is useful only for devices with single power supply.
+ *
+ * Return: 0 if modification was successful or a negative error value.
+ */
+int dev_pm_opp_update_voltage(struct device *dev, unsigned long freq,
+			      unsigned long u_volt)
+{
+	struct dev_pm_opp *opp = ERR_PTR(-ENODEV);
+	struct opp_table *opp_table;
+	unsigned long tol;
+	int ret = 0;
+
+	/* Find the opp_table */
+	opp_table = _find_opp_table(dev);
+	if (IS_ERR(opp_table)) {
+		ret = PTR_ERR(opp_table);
+		dev_err(dev, "%s: OPP table not found (%d)\n", __func__, ret);
+		return PTR_ERR(opp_table);
+	}
+
+	opp = dev_pm_opp_find_freq_exact(dev, freq, false);
+	if (IS_ERR(opp)) {
+		ret = PTR_ERR(opp);
+		goto put_table;
+	}
+
+	mutex_lock(&opp_table->lock);
+
+	/* update only if the opp is disabled */
+	if (opp->available) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+
+	tol = u_volt * opp_table->voltage_tolerance_v1 / 100;
+	opp->supplies[0].u_volt_min = u_volt - tol;
+	opp->supplies[0].u_volt = u_volt;
+	opp->supplies[0].u_volt_min = u_volt + tol;
+
+unlock:
+	mutex_unlock(&opp_table->lock);
+	dev_pm_opp_put(opp);
+put_table:
+	dev_pm_opp_put_opp_table(opp_table);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_update_voltage);
+
+/**
  * dev_pm_opp_register_notifier() - Register OPP notifier for the device
  * @dev:	Device for which notifier needs to be registered
  * @nb:		Notifier block to be registered
