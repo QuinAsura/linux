@@ -1,0 +1,82 @@
+QTI's LAB (LCD/AMOLED BOOST)/IBB (Inverting Buck-Boost) Regulator
+
+LAB can be used as a standalone positive boost power supply for general purpose
+applications. IBB can be used as a standalone negative power supply for general
+applications. Also, LAB and IBB can be used together to provide power supply for
+display panels, LCD or AMOLED.
+
+Main node required properties:
+
+- compatible:			Must be "qcom,qpnp-labibb-regulator"
+
+LAB subnode required properties:
+
+- reg:				Specifies the SPMI address and size for this peripheral.
+- reg-names:			Register names. Must be "lab".
+- regulator-name:		A string used to describe the regulator.
+- interrupts:				Specify the interrupts as per the interrupt
+					encoding.
+					Currently "lab-vreg-ok" is required and "lab-sc_err"
+					is optional for LCD mode in pmi8998.
+					For AMOLED mode, "lab-vreg-ok" is required
+					only when SWIRE control is enabled and skipping
+					2nd SWIRE pulse is required in pmi8952/8996.
+- interrupt-names:			Interrupt names to match up 1-to-1 with
+					the interrupts specified in 'interrupts'
+					property.
+
+IBB subnode required properties:
+
+- reg:				Specifies the SPMI address and size for this peripheral.
+- reg-names:			Register names. Must be "ibb".
+- regulator-name:		A string used to describe the regulator.
+- qcom,qpnp-ibb-init-voltage:	The default initial voltage when the bootloader does
+				not turn on IBB regulator.
+
+IBB subnode optional properties:
+
+- interrupts:				Specify the interrupts as per the interrupt
+					encoding.
+					Currently "ibb-sc-err" could be used for LCD mode
+					in pmi8998 to detect the short circuit fault.
+- interrupt-names:			Interrupt names to match up 1-to-1 with
+					the interrupts specified in 'interrupts'
+					property.
+- qcom,qpnp-ibb-lab-pwrup-delay:	Power up delay (in us) for IBB regulator when
+					it is enabled or turned on. Supported values
+					are 1000, 2000, 4000 and 8000.
+- qcom,qpnp-ibb-en-discharge:			A boolean property which upon set will
+						enable discharge for IBB regulator.
+						Otherwise, it is kept disabled.
+Example:
+	qcom,pmi8994@3 {
+		qpnp-labibb-regulator {
+			compatible = "qcom,qpnp-labibb-regulator";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			lab_regulator: qcom,lab@de00 {
+				reg = <0xde00 0x100>;
+				reg-names = "lab";
+
+				interrupts = <0x3 0xde 0x0
+						IRQ_TYPE_EDGE_RISING>;
+                                interrupt-names = "lab-vreg-ok";
+
+				regulator-name = "lab_reg";
+				
+			};
+
+			ibb_regulator: qcom,ibb@dc00 {
+				reg = <0xdc00 0x100>;
+				reg-names = "ibb_reg";
+				regulator-name = "ibb_reg";
+
+				interrupt-names = "ibb-sc-err";
+                                qcom,qpnp-ibb-init-voltage = <5500000>;
+                                qcom,qpnp-ibb-lab-pwrup-delay = <8000>;
+                                qcom,qpnp-ibb-en-discharge;
+			};
+
+		};
+	};
