@@ -13,7 +13,7 @@
 #include <linux/soc/qcom/apr.h>
 #include <linux/rpmsg.h>
 #include <linux/of.h>
-
+#include "apr.debug"
 struct apr {
 	struct rpmsg_endpoint *ch;
 	struct device *dev;
@@ -55,6 +55,8 @@ int apr_send_pkt(struct apr_device *adev, struct apr_pkt *pkt)
 	hdr->dest_domain = adev->domain_id;
 	hdr->dest_svc = adev->svc_id;
 
+	pr_err("APR-PKT: %x  CMD: %s pkt_size %d \n", hdr->opcode, get_cmd_name(hdr->opcode),  hdr->pkt_size);
+	print_hex_dump(KERN_EMERG, "APR_PKT:", DUMP_PREFIX_OFFSET, 16, 2, pkt, hdr->pkt_size, 0);
 	ret = rpmsg_trysend(apr->ch, pkt, hdr->pkt_size);
 	spin_unlock_irqrestore(&adev->lock, flags);
 
@@ -76,6 +78,7 @@ static int apr_callback(struct rpmsg_device *rpdev, void *buf,
 	struct apr_rx_buf *abuf;
 	unsigned long flags;
 
+	pr_err("DEBUG:.... %s: %d \n", __func__, __LINE__);
 	if (len <= APR_HDR_SIZE) {
 		dev_err(apr->dev, "APR: Improper apr pkt received:%p %d\n",
 			buf, len);
@@ -161,6 +164,8 @@ static int apr_do_rx_callback(struct apr *apr, struct apr_rx_buf *abuf)
 	resp.hdr = *hdr;
 	resp.payload_size = hdr->pkt_size - hdr_size;
 
+
+	pr_err("DEBUG:: %s: %d \n", __func__, __LINE__);
 	/*
 	 * NOTE: hdr_size is not same as APR_HDR_SIZE as remote can include
 	 * optional headers in to apr_hdr which should be ignored

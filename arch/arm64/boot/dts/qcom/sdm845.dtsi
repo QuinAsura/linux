@@ -21,6 +21,7 @@
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
 #include <dt-bindings/clock/qcom,gcc-sdm845.h>
 #include <dt-bindings/thermal/thermal.h>
+#include <dt-bindings/soc/qcom,apr.h>
 
 / {
 	interrupt-parent = <&intc>;
@@ -616,13 +617,61 @@
 		qcom,smem-states = <&adsp_smp2p_out 0>;
 		qcom,smem-state-names = "stop";
 
-		status = "disabled";
 
 		glink-edge {
 			interrupts = <GIC_SPI 156 IRQ_TYPE_EDGE_RISING>;
 			label = "lpass";
 			qcom,remote-pid = <2>;
 			mboxes = <&apss_shared 8>;
+			apr {
+				compatible = "qcom,apr-v2";
+				qcom,glink-channels = "apr_audio_svc";
+				reg = <APR_DOMAIN_ADSP>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+//				qcom,intents = <512 20>;
+
+				q6core {
+					reg = <APR_SVC_ADSP_CORE>;
+					compatible = "qcom,q6core";
+				};
+
+				q6afe: q6afe {
+					compatible = "qcom,q6afe";
+					reg = <APR_SVC_AFE>;
+					q6afedai: dais {
+						compatible = "qcom,q6afe-dais";
+						#address-cells = <1>;
+						#size-cells = <0>;
+						#sound-dai-cells = <1>;
+
+						qi2s@22 {
+							reg = <22>;
+							qcom,sd-lines = <3>;
+						};
+					};
+				};
+
+				q6asm: q6asm {
+					compatible = "qcom,q6asm";
+					reg = <APR_SVC_ASM>;
+					q6asmdai: dais {
+						compatible = "qcom,q6asm-dais";
+						#sound-dai-cells = <1>;
+						iommus = <&apps_smmu 0x1821 0x0>;
+						//iommus = <&lpass_q6_smmu 1>;
+					};
+				};
+
+				q6adm: q6adm {
+					compatible = "qcom,q6adm";
+					reg = <APR_SVC_ADM>;
+					q6routing: routing {
+						compatible = "qcom,q6adm-routing";
+						#sound-dai-cells = <0>;
+					};
+				};
+			};
 		};
 	};
 

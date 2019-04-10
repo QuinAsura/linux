@@ -72,7 +72,7 @@ static int q6core_callback(struct apr_device *adev, struct apr_resp_pkt *data)
 	struct q6core *core = dev_get_drvdata(&adev->dev);
 	struct aprv2_ibasic_rsp_result_t *result;
 	struct apr_hdr *hdr = &data->hdr;
-
+pr_err("DEBUG:: %s: %d \n", __func__, __LINE__);
 	result = data->payload;
 	switch (hdr->opcode) {
 	case APR_BASIC_RSP_RESULT:{
@@ -151,7 +151,7 @@ static int q6core_callback(struct apr_device *adev, struct apr_resp_pkt *data)
 static int q6core_get_fwk_versions(struct q6core *core)
 {
 	struct apr_device *adev = core->adev;
-	struct apr_pkt pkt;
+	struct apr_pkt pkt = {0,};
 	int rc;
 
 	pkt.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
@@ -181,7 +181,7 @@ static int q6core_get_fwk_versions(struct q6core *core)
 static int q6core_get_svc_versions(struct q6core *core)
 {
 	struct apr_device *adev = core->adev;
-	struct apr_pkt pkt;
+	struct apr_pkt pkt = {0,};
 	int rc;
 
 	pkt.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
@@ -206,7 +206,7 @@ static int q6core_get_svc_versions(struct q6core *core)
 static bool __q6core_is_adsp_ready(struct q6core *core)
 {
 	struct apr_device *adev = core->adev;
-	struct apr_pkt pkt;
+	struct apr_pkt pkt = {0,};
 	int rc;
 
 	core->get_state_supported = false;
@@ -327,6 +327,9 @@ EXPORT_SYMBOL_GPL(q6core_is_adsp_ready);
 
 static int q6core_probe(struct apr_device *adev)
 {
+
+	struct q6core_svc_api_info ainfo;
+
 	g_core = kzalloc(sizeof(*g_core), GFP_KERNEL);
 	if (!g_core)
 		return -ENOMEM;
@@ -336,6 +339,12 @@ static int q6core_probe(struct apr_device *adev)
 	mutex_init(&g_core->lock);
 	g_core->adev = adev;
 	init_waitqueue_head(&g_core->wait);
+	q6core_is_adsp_ready();
+
+	q6core_get_svc_api_info(APR_SVC_ASM, &ainfo);
+	q6core_get_svc_api_info(APR_SVC_AFE, &ainfo);
+	q6core_get_svc_api_info(APR_SVC_ADM, &ainfo);
+	q6core_get_svc_api_info(APR_SVC_ADSP_CORE, &ainfo);
 	return 0;
 }
 
