@@ -937,6 +937,8 @@ static struct opp_table *_allocate_opp_table(struct device *dev, int index)
 				ret);
 	}
 
+	_of_find_paths(opp_table, dev);
+
 	BLOCKING_INIT_NOTIFIER_HEAD(&opp_table->head);
 	INIT_LIST_HEAD(&opp_table->opp_list);
 	kref_init(&opp_table->kref);
@@ -1191,19 +1193,21 @@ EXPORT_SYMBOL_GPL(dev_pm_opp_remove_all_dynamic);
 struct dev_pm_opp *_opp_allocate(struct opp_table *table)
 {
 	struct dev_pm_opp *opp;
-	int count, supply_size;
+	int count, supply_size, icc_size;
 
 	/* Allocate space for at least one supply */
 	count = table->regulator_count > 0 ? table->regulator_count : 1;
 	supply_size = sizeof(*opp->supplies) * count;
+	icc_size = sizeof(*opp->bandwidth) * table->path_count;
 
 	/* allocate new OPP node and supplies structures */
-	opp = kzalloc(sizeof(*opp) + supply_size, GFP_KERNEL);
+	opp = kzalloc(sizeof(*opp) + supply_size + icc_size, GFP_KERNEL);
 	if (!opp)
 		return NULL;
 
 	/* Put the supplies at the end of the OPP structure as an empty array */
 	opp->supplies = (struct dev_pm_opp_supply *)(opp + 1);
+	opp->bandwidth = (struct dev_pm_opp_icc_bw *)(opp->supplies + 1);
 	INIT_LIST_HEAD(&opp->node);
 
 	return opp;
@@ -1708,6 +1712,107 @@ void dev_pm_opp_put_clkname(struct opp_table *opp_table)
 	dev_pm_opp_put_opp_table(opp_table);
 }
 EXPORT_SYMBOL_GPL(dev_pm_opp_put_clkname);
+
+/**
+ * dev_pm_opp_set_paths() - Set interconnect path for a device
+ * @dev: Device for which interconnect path is being set.
+ *
+ * This must be called before any OPPs are initialized for the device.
+ */
+struct opp_table *dev_pm_opp_set_paths(struct device *dev)
+{
+	struct opp_table *opp_table;
+	struct device_node *np;
+	int ret, i, num_paths;
+
+	opp_table = dev_pm_opp_get_opp_table(dev);
+	if (!opp_table)
+		return ERR_PTR(-ENOMEM);
+
+	/* This should be called before OPPs are initialized */
+	if (WARN_ON(!list_empty(&opp_table->opp_list))) {
+		ret = -EBUSY;
+		goto err;
+	}
+
+	/* Another CPU that shares the OPP table has set the path */
+	if (opp_table->paths)
+		return opp_table;
+
+	np = of_node_get(dev->of_node);
+	num_paths = of_count_phandle_with_args(np, "interconnects",
+					       "#interconnect-cells");
+	of_node_put(np);
+
+	if (num_paths <= 0)
+		return ERR_PTR(-EINVAL);
+
+	if (num_paths % 2) {
+		dev_err(dev, "%s: Invalid interconnects values\n",
+			__func__);
+		return ERR_PTR(-EINVAL);
+	}
+	num_paths = num_paths / 2;
+
+	opp_table->paths = kmalloc_array(num_paths, sizeof(*opp_table->paths),
+					 GFP_KERNEL);
+
+	/* Find interconnect path(s) for the device */
+	for (i = 0; i < num_paths; i++) {
+		opp_table->paths[i] = of_icc_get_by_index(dev, i);
+		if (IS_ERR(opp_table->paths[i])) {
+			ret = PTR_ERR(opp_table->paths[i]);
+			if (ret != -EPROBE_DEFER)
+				dev_err(dev, "%s: Couldn't find path%d: %d\n",
+					__func__, i, ret);
+			goto free;
+		}
+	}
+
+	opp_table->path_count = num_paths;
+
+	return opp_table;
+
+free:
+	for (i--; i >= 0; i--)
+		icc_put(opp_table->paths[i]);
+	kfree(opp_table->paths);
+	opp_table->paths = NULL;
+err:
+	dev_pm_opp_put_opp_table(opp_table);
+
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_set_paths);
+
+/**
+ * dev_pm_opp_put_paths() - Release interconnect path resources
+ * @opp_table: OPP table returned from dev_pm_opp_set_paths().
+ */
+void dev_pm_opp_put_paths(struct opp_table *opp_table)
+{
+	int i;
+
+	if (!opp_table->paths) {
+		pr_err("%s: Doesn't have paths set\n", __func__);
+		return;
+	}
+
+	/* Make sure there are no concurrent readers while updating opp_table */
+	WARN_ON(!list_empty(&opp_table->opp_list));
+
+	for (i = opp_table->path_count - 1; i >= 0; i--)
+		icc_put(opp_table->paths[i]);
+
+	_free_set_opp_data(opp_table);
+
+	kfree(opp_table->paths);
+	opp_table->paths = NULL;
+	opp_table->path_count = 0;
+
+	dev_pm_opp_put_opp_table(opp_table);
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_put_paths);
 
 /**
  * dev_pm_opp_register_set_opp_helper() - Register custom set OPP helper

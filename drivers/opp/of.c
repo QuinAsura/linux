@@ -334,6 +334,60 @@ free_required_opps:
 	return ret;
 }
 
+int _of_find_paths(struct opp_table *opp_table, struct device *dev)
+{
+	struct device_node *np;
+	int ret, i, count, num_paths;
+
+	np = of_node_get(dev->of_node);
+	if (np) {
+		count = of_count_phandle_with_args(np, "interconnects",
+						   "#interconnect-cells");
+		if (count <= 0) {
+			ret = -EINVAL;
+			goto put_of_node;
+		}
+
+		if (count % 2) {
+			dev_err(dev, "%s: Invalid interconnects values\n",
+				__func__);
+			ret = -EINVAL;
+			goto put_of_node;
+		}
+
+		num_paths = count / 2;
+		opp_table->paths = kcalloc(num_paths, sizeof(*opp_table->paths),
+					   GFP_KERNEL);
+		if (!opp_table->paths) {
+			ret = -ENOMEM;
+			goto put_of_node;
+		}
+
+		for (i = 0; i < num_paths; i++) {
+			opp_table->paths[i] = of_icc_get_by_index(dev, i);
+			if (IS_ERR(opp_table->paths[i])) {
+				ret = PTR_ERR(opp_table->paths[i]);
+				goto free;
+			}
+		}
+
+		opp_table->path_count = num_paths;
+		of_node_put(np);
+	}
+
+	return 0;
+
+free:
+	for (i--; i >= 0; i--)
+		icc_put(opp_table->paths[i]);
+	kfree(opp_table->paths);
+	opp_table->paths = NULL;
+put_of_node:
+	of_node_put(np);
+
+	return ret;
+}
+
 static bool _opp_is_supported(struct device *dev, struct opp_table *opp_table,
 			      struct device_node *np)
 {
@@ -510,6 +564,64 @@ free_microvolt:
 	return ret;
 }
 
+static int opp_parse_icc_bw(struct dev_pm_opp *opp, struct device *dev,
+			    struct opp_table *opp_table)
+{
+	struct property *prop = NULL;
+	u32 *bandwidth;
+	char name[] = "bandwidth-MBps";
+	int count, i, j, ret;
+
+	/* Search for "bandwidth-MBps" */
+	prop = of_find_property(opp->np, name, NULL);
+
+	/* Missing property is not a problem */
+	if (!prop) {
+		dev_dbg(dev, "%s: Missing %s property\n", __func__, name);
+		return 0;
+	}
+
+	if (!prop->value) {
+		dev_dbg(dev, "%s: Missing %s value\n", __func__, name);
+		return -ENODATA;
+	}
+
+	/*
+	 * Bandwidth consists of average and peak values like:
+	 * bandwidth-MBps = <avg-MBps peak-MBps>
+	 */
+	count = prop->length / sizeof(u32);
+	if (count % 2) {
+		dev_err(dev, "%s: Invalid %s values\n", __func__, name);
+		return -EINVAL;
+	}
+
+	if (opp_table->path_count != count / 2) {
+		dev_err(dev, "%s Mismatch between values and paths (%d %d)\n",
+			__func__, opp_table->path_count, count / 2);
+		return -EINVAL;
+	}
+
+	bandwidth = kmalloc_array(count, sizeof(*bandwidth), GFP_KERNEL);
+	if (!bandwidth)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(opp->np, name, bandwidth, count);
+	if (ret) {
+		dev_err(dev, "%s: Error parsing %s: %d\n", __func__, name, ret);
+		goto free_bandwidth;
+	}
+	for (i = 0, j = 0; i < count; i++) {
+		opp->bandwidth[i].avg = MBps_to_icc(bandwidth[j++]);
+		opp->bandwidth[i].peak = MBps_to_icc(bandwidth[j++]);
+	}
+
+free_bandwidth:
+	kfree(bandwidth);
+
+	return ret;
+}
+
 /**
  * dev_pm_opp_of_remove_table() - Free OPP table entries created from static DT
  *				  entries
@@ -605,6 +717,10 @@ static struct dev_pm_opp *_opp_add_static_v2(struct opp_table *opp_table,
 
 	if (opp_table->is_genpd)
 		new_opp->pstate = pm_genpd_opp_to_performance_state(dev, new_opp);
+
+	ret = opp_parse_icc_bw(new_opp, dev, opp_table);
+	if (ret)
+		goto free_opp;
 
 	ret = _opp_add(dev, new_opp, opp_table, rate_not_available);
 	if (ret) {
