@@ -132,6 +132,9 @@ Optional properties:
 - opp-level: A value representing the performance level of the device,
   expressed as a 32-bit integer.
 
+- bandwidth-MBps: The interconnect bandwidth is specified with an array containing
+  the two integer values for average and peak bandwidth in megabytes per second.
+
 - clock-latency-ns: Specifies the maximum possible transition latency (in
   nanoseconds) for switching to this OPP from any other OPP.
 
@@ -546,3 +549,38 @@ Example 6: opp-microvolt-<name>, opp-microamp-<name>:
 		};
 	};
 };
+
+Example 7: bandwidth-MBps:
+Average and peak bandwidth values for the interconnects between CPU and DDR
+memory and also between CPU and L3 are defined per each OPP. Bandwidth of both
+interconnects is scaled together with CPU frequency.
+
+/ {
+	cpus {
+		CPU0: cpu@0 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			...
+			operating-points-v2 = <&cpu_opp_table>;
+			/* path between CPU and DDR memory and CPU and L3 */
+			interconnects = <&noc MASTER_CPU &noc SLAVE_DDR>,
+					<&noc MASTER_CPU &noc SLAVE_L3>;
+		};
+	};
+
+	cpu_opp_table: cpu_opp_table {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-200000000 {
+			opp-hz = /bits/ 64 <200000000>;
+			/* CPU<->DDR bandwidth: 457 MB/s average, 1525 MB/s peak */
+			 * CPU<->L3 bandwidth: 914 MB/s average, 3050 MB/s peak */
+			bandwidth-MBps = <457 1525>, <914 3050>;
+		};
+		opp-400000000 {
+			opp-hz = /bits/ 64 <400000000>;
+			/* CPU<->DDR bandwidth: 915 MB/s average, 3051 MB/s peak */
+			 * CPU<->L3 bandwidth: 1828 MB/s average, 6102 MB/s peak */
+			bandwidth-MBps = <915 3051>, <1828 6102>;
+		};
+	};
