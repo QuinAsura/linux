@@ -760,7 +760,7 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 	unsigned long freq, old_freq, temp_freq;
 	struct dev_pm_opp *old_opp, *opp;
 	struct clk *clk;
-	int ret;
+	int ret, i;
 
 	opp_table = _find_opp_table(dev);
 	if (IS_ERR(opp_table)) {
@@ -838,6 +838,13 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 	} else {
 		/* Only frequency scaling */
 		ret = _generic_set_opp_clk_only(dev, clk, freq);
+	}
+
+	if (!ret && !IS_ERR_OR_NULL(opp_table->paths)) {
+		for (i = 0; i < opp_table->path_count; i++) {
+			icc_set_bw(opp_table->paths[i], opp->bandwidth[i].avg,
+				   opp->bandwidth[i].peak);
+		}
 	}
 
 	/* Scaling down? Configure required OPPs after frequency */
