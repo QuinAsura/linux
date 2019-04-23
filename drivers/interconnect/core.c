@@ -297,9 +297,9 @@ static struct icc_node *of_icc_get_from_provider(struct of_phandle_args *spec)
 }
 
 /**
- * of_icc_get() - get a path handle from a DT node based on name
+ * of_icc_get_by_index() - get a path handle from a DT node based on index
  * @dev: device pointer for the consumer device
- * @name: interconnect path name
+ * @idx: interconnect path index
  *
  * This function will search for a path between two endpoints and return an
  * icc_path handle on success. Use icc_put() to release constraints when they
@@ -311,13 +311,12 @@ static struct icc_node *of_icc_get_from_provider(struct of_phandle_args *spec)
  * Return: icc_path pointer on success or ERR_PTR() on error. NULL is returned
  * when the API is disabled or the "interconnects" DT property is missing.
  */
-struct icc_path *of_icc_get(struct device *dev, const char *name)
+struct icc_path *of_icc_get_by_index(struct device *dev, int idx)
 {
 	struct icc_path *path = ERR_PTR(-EPROBE_DEFER);
 	struct icc_node *src_node, *dst_node;
 	struct device_node *np = NULL;
 	struct of_phandle_args src_args, dst_args;
-	int idx = 0;
 	int ret;
 
 	if (!dev || !dev->of_node)
@@ -337,12 +336,6 @@ struct icc_path *of_icc_get(struct device *dev, const char *name)
 	 * lets support only global ids and extend this in the future if needed
 	 * without breaking DT compatibility.
 	 */
-	if (name) {
-		idx = of_property_match_string(np, "interconnect-names", name);
-		if (idx < 0)
-			return ERR_PTR(idx);
-	}
-
 	ret = of_parse_phandle_with_args(np, "interconnects",
 					 "#interconnect-cells", idx * 2,
 					 &src_args);
@@ -384,6 +377,41 @@ struct icc_path *of_icc_get(struct device *dev, const char *name)
 	mutex_unlock(&icc_lock);
 
 	return path;
+}
+
+/**
+ * of_icc_get() - get a path handle from a DT node based on name
+ * @dev: device pointer for the consumer device
+ * @name: interconnect path name
+ *
+ * This function will search for a path between two endpoints and return an
+ * icc_path handle on success. Use icc_put() to release constraints when they
+ * are not needed anymore.
+ * If the interconnect API is disabled, NULL is returned and the consumer
+ * drivers will still build. Drivers are free to handle this specifically,
+ * but they don't have to.
+ *
+ * Return: icc_path pointer on success or ERR_PTR() on error. NULL is returned
+ * when the API is disabled or the "interconnects" DT property is missing.
+ */
+struct icc_path *of_icc_get(struct device *dev, const char *name)
+{
+	int idx = 0;
+
+	if (!dev || !dev->of_node)
+		return ERR_PTR(-ENODEV);
+
+	if (name) {
+		if (!of_find_property(dev->of_node, "interconnects", NULL))
+			return NULL;
+
+		idx = of_property_match_string(dev->of_node,
+					       "interconnect-names", name);
+		if (idx < 0)
+			return ERR_PTR(idx);
+	}
+
+	return of_icc_get_by_index(dev, idx);
 }
 EXPORT_SYMBOL_GPL(of_icc_get);
 
