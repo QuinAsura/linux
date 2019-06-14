@@ -13,6 +13,8 @@ platforms.
 		    "qcom,msm8998-apcs-hmss-global"
 		    "qcom,qcs404-apcs-apps-global"
 		    "qcom,sdm845-apss-shared"
+		    "qcom,sm8150-apss-shared"
+		    "qcom,sc7180-apss-shared"
 
 - reg:
 	Usage: required
