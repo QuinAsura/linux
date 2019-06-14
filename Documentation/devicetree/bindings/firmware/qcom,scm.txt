@@ -17,6 +17,8 @@ Required properties:
  * "qcom,scm-msm8998"
  * "qcom,scm-ipq4019"
  * "qcom,scm-sdm845"
+ * "qcom,scm-sm8150"
+ * "qcom,scm-sc7180"
  and:
  * "qcom,scm"
 - clocks: Specifies clocks needed by the SCM interface, if any:
