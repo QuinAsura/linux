@@ -744,6 +744,52 @@ static int _set_required_opps(struct device *dev,
 }
 
 /**
+ * dev_pm_opp_set_bw() - Configures OPP bandwidth levels
+ * @dev:	device for which we do this operation
+ * @freq:	bandwidth values to set with matching 'freq'
+ *
+ * This configures the bandwidth to the levels specified
+ * by the OPP corresponding to the given frequency.
+ *
+ * Return: 0 on success or a negative error value.
+ */
+int dev_pm_opp_set_bw(struct device *dev, unsigned long freq)
+{
+	struct opp_table *opp_table;
+	struct dev_pm_opp *opp;
+	int ret = 0;
+	int i;
+
+	opp = dev_pm_opp_find_freq_exact(dev, freq, true);
+	if (IS_ERR(opp))
+		return PTR_ERR(opp);
+
+	opp_table = _find_opp_table(dev);
+	if (IS_ERR(opp_table)) {
+		dev_err(dev, "%s: device opp table doesn't exist\n", __func__);
+		ret = PTR_ERR(opp_table);
+		goto put_opp;
+	}
+
+	if (IS_ERR_OR_NULL(opp_table->paths)) {
+		ret = -ENODEV;
+		goto put_opp_table;
+	}
+
+	for (i = 0; i < opp_table->path_count; i++) {
+		ret = icc_set_bw(opp_table->paths[i], opp->bandwidth[i].avg,
+				 opp->bandwidth[i].peak);
+	}
+
+put_opp_table:
+	dev_pm_opp_put_opp_table(opp_table);
+put_opp:
+	dev_pm_opp_put(opp);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_set_bw);
+
+/**
  * dev_pm_opp_set_rate() - Configure new OPP based on frequency
  * @dev:	 device for which we do this operation
  * @target_freq: frequency to achieve
