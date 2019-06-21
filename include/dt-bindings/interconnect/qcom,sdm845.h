@@ -144,4 +144,12 @@
 #define MASTER_OSM_L3			0
 #define SLAVE_OSM_L3			1
 
+/* SDM845 RSC Supported Tags */
+#define QCOM_ICC_AMC		0x1
+#define QCOM_ICC_WAKE		0x2
+#define QCOM_ICC_SLEEP		0x4
+#define QCOM_ICC_ACTIVE_ONLY	(QCOM_ICC_AMC | QCOM_ICC_WAKE)
+#define QCOM_ICC_ALWAYS		(QCOM_ICC_AMC | QCOM_ICC_WAKE |\
+				 QCOM_ICC_SLEEP)
+
 #endif
