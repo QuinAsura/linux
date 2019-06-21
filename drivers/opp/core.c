@@ -1777,6 +1777,7 @@ struct opp_table *dev_pm_opp_set_paths(struct device *dev)
 	struct opp_table *opp_table;
 	struct device_node *np;
 	int ret, i, num_paths;
+	u32 tag;
 
 	opp_table = dev_pm_opp_get_opp_table(dev);
 	if (!opp_table)
@@ -1795,15 +1796,16 @@ struct opp_table *dev_pm_opp_set_paths(struct device *dev)
 	np = of_node_get(dev->of_node);
 	num_paths = of_count_phandle_with_args(np, "interconnects",
 					       "#interconnect-cells");
-	of_node_put(np);
-
-	if (num_paths <= 0)
-		return ERR_PTR(-EINVAL);
+	if (num_paths <= 0) {
+		ret = -EINVAL;
+		goto err_node;
+	}
 
 	if (num_paths % 2) {
 		dev_err(dev, "%s: Invalid interconnects values\n",
 			__func__);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto err_node;
 	}
 	num_paths = num_paths / 2;
 
@@ -1820,7 +1822,12 @@ struct opp_table *dev_pm_opp_set_paths(struct device *dev)
 					__func__, i, ret);
 			goto free;
 		}
+		/* Set tag if present */
+		if (!of_property_read_u32_index(np, "interconnect-tags",
+						i, &tag))
+			icc_set_tag(opp_table->paths[i], tag);
 	}
+	of_node_put(np);
 
 	opp_table->path_count = num_paths;
 
@@ -1831,6 +1838,8 @@ free:
 		icc_put(opp_table->paths[i]);
 	kfree(opp_table->paths);
 	opp_table->paths = NULL;
+err_node:
+	of_node_put(np);
 err:
 	dev_pm_opp_put_opp_table(opp_table);
 

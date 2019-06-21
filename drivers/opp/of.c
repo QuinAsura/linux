@@ -338,6 +338,7 @@ int _of_find_paths(struct opp_table *opp_table, struct device *dev)
 {
 	struct device_node *np;
 	int ret, i, count, num_paths;
+	u32 tag;
 
 	np = of_node_get(dev->of_node);
 	if (np) {
@@ -369,6 +370,11 @@ int _of_find_paths(struct opp_table *opp_table, struct device *dev)
 				ret = PTR_ERR(opp_table->paths[i]);
 				goto free;
 			}
+
+			/* Set tag if present */
+			if (!of_property_read_u32_index(np, "interconnect-tags",
+							i, &tag))
+				icc_set_tag(opp_table->paths[i], tag);
 		}
 
 		opp_table->path_count = num_paths;
