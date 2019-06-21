@@ -20,6 +20,8 @@
 #include <soc/qcom/rpmh.h>
 #include <soc/qcom/tcs.h>
 
+#include "osm-l3.h"
+
 #define BCM_TCS_CMD_COMMIT_SHFT		30
 #define BCM_TCS_CMD_COMMIT_MASK		0x40000000
 #define BCM_TCS_CMD_VALID_SHFT		29
@@ -39,6 +41,16 @@
 
 #define to_qcom_provider(_provider) \
 	container_of(_provider, struct qcom_icc_provider, provider)
+
+enum {
+	QCOM_ICC_VOTE_BCM,
+	QCOM_ICC_VOTE_OSM,
+};
+
+enum {
+	SDM845_MASTER_OSM_L3 = SLAVE_APPSS_OSM + 1,
+	SDM845_SLAVE_OSM_L3,
+};
 
 struct qcom_icc_provider {
 	struct icc_provider provider;
@@ -147,6 +159,7 @@ struct qcom_icc_desc {
 	size_t num_nodes;
 	struct qcom_icc_bcm **bcms;
 	size_t num_bcms;
+	u8 qcom_icc_vote_type;
 };
 
 #define DEFINE_QNODE(_name, _id, _channels, _buswidth,			\
@@ -186,7 +199,7 @@ DEFINE_QNODE(qhm_tic, MASTER_TIC, 1, 4, 43, SLAVE_A1NOC_CFG, SLAVE_A2NOC_CFG, SL
 DEFINE_QNODE(qnm_snoc, MASTER_SNOC_CNOC, 1, 8, 42, SLAVE_A1NOC_CFG, SLAVE_A2NOC_CFG, SLAVE_AOP, SLAVE_AOSS, SLAVE_CAMERA_CFG, SLAVE_CLK_CTL, SLAVE_CDSP_CFG, SLAVE_RBCPR_CX_CFG, SLAVE_CRYPTO_0_CFG, SLAVE_DCC_CFG, SLAVE_CNOC_DDRSS, SLAVE_DISPLAY_CFG, SLAVE_GLM, SLAVE_GFX3D_CFG, SLAVE_IMEM_CFG, SLAVE_IPA_CFG, SLAVE_CNOC_MNOC_CFG, SLAVE_PCIE_0_CFG, SLAVE_PCIE_1_CFG, SLAVE_PDM, SLAVE_SOUTH_PHY_CFG, SLAVE_PIMEM_CFG, SLAVE_PRNG, SLAVE_QDSS_CFG, SLAVE_BLSP_2, SLAVE_BLSP_1, SLAVE_SDCC_2, SLAVE_SDCC_4, SLAVE_SNOC_CFG, SLAVE_SPDM_WRAPPER, SLAVE_SPSS_CFG, SLAVE_TCSR, SLAVE_TLMM_NORTH, SLAVE_TLMM_SOUTH, SLAVE_TSIF, SLAVE_UFS_CARD_CFG, SLAVE_UFS_MEM_CFG, SLAVE_USB3_0, SLAVE_USB3_1, SLAVE_VENUS_CFG, SLAVE_VSENSE_CTRL_CFG, SLAVE_SERVICE_CNOC);
 DEFINE_QNODE(xm_qdss_dap, MASTER_QDSS_DAP, 1, 8, 43, SLAVE_A1NOC_CFG, SLAVE_A2NOC_CFG, SLAVE_AOP, SLAVE_AOSS, SLAVE_CAMERA_CFG, SLAVE_CLK_CTL, SLAVE_CDSP_CFG, SLAVE_RBCPR_CX_CFG, SLAVE_CRYPTO_0_CFG, SLAVE_DCC_CFG, SLAVE_CNOC_DDRSS, SLAVE_DISPLAY_CFG, SLAVE_GLM, SLAVE_GFX3D_CFG, SLAVE_IMEM_CFG, SLAVE_IPA_CFG, SLAVE_CNOC_MNOC_CFG, SLAVE_PCIE_0_CFG, SLAVE_PCIE_1_CFG, SLAVE_PDM, SLAVE_SOUTH_PHY_CFG, SLAVE_PIMEM_CFG, SLAVE_PRNG, SLAVE_QDSS_CFG, SLAVE_BLSP_2, SLAVE_BLSP_1, SLAVE_SDCC_2, SLAVE_SDCC_4, SLAVE_SNOC_CFG, SLAVE_SPDM_WRAPPER, SLAVE_SPSS_CFG, SLAVE_TCSR, SLAVE_TLMM_NORTH, SLAVE_TLMM_SOUTH, SLAVE_TSIF, SLAVE_UFS_CARD_CFG, SLAVE_UFS_MEM_CFG, SLAVE_USB3_0, SLAVE_USB3_1, SLAVE_VENUS_CFG, SLAVE_VSENSE_CTRL_CFG, SLAVE_CNOC_A2NOC, SLAVE_SERVICE_CNOC);
 DEFINE_QNODE(qhm_cnoc, MASTER_CNOC_DC_NOC, 1, 4, 2, SLAVE_LLCC_CFG, SLAVE_MEM_NOC_CFG);
-DEFINE_QNODE(acm_l3, MASTER_APPSS_PROC, 1, 16, 3, SLAVE_GNOC_SNOC, SLAVE_GNOC_MEM_NOC, SLAVE_SERVICE_GNOC);
+DEFINE_QNODE(acm_l3, MASTER_APPSS_PROC, 1, 16, 4, SLAVE_GNOC_SNOC, SLAVE_GNOC_MEM_NOC, SLAVE_SERVICE_GNOC, SLAVE_APPSS_OSM);
 DEFINE_QNODE(pm_gnoc_cfg, MASTER_GNOC_CFG, 1, 4, 1, SLAVE_SERVICE_GNOC);
 DEFINE_QNODE(llcc_mc, MASTER_LLCC, 4, 4, 1, SLAVE_EBI1);
 DEFINE_QNODE(acm_tcu, MASTER_TCU_0, 1, 8, 3, SLAVE_MEM_NOC_GNOC, SLAVE_LLCC, SLAVE_MEM_NOC_SNOC);
@@ -290,6 +303,9 @@ DEFINE_QNODE(qxs_pimem, SLAVE_PIMEM, 1, 8, 0);
 DEFINE_QNODE(srvc_snoc, SLAVE_SERVICE_SNOC, 1, 4, 0);
 DEFINE_QNODE(xs_qdss_stm, SLAVE_QDSS_STM, 1, 4, 0);
 DEFINE_QNODE(xs_sys_tcu_cfg, SLAVE_TCU, 1, 8, 0);
+DEFINE_QNODE(acm_apss_l3, SLAVE_APPSS_OSM, 1, 16, 1, SDM845_MASTER_OSM_L3);
+DEFINE_QNODE(osm_agg, SDM845_MASTER_OSM_L3, 1, 16, 1, SDM845_SLAVE_OSM_L3);
+DEFINE_QNODE(osm_l3, SDM845_SLAVE_OSM_L3, 1, 16, 0);
 
 #define DEFINE_QBCM(_name, _bcmname, _keepalive, _numnodes, ...)	\
 		static struct qcom_icc_bcm _name = {			\
@@ -459,6 +475,7 @@ static struct qcom_icc_node *rsc_hlos_nodes[] = {
 	[SLAVE_SERVICE_SNOC] = &srvc_snoc,
 	[SLAVE_QDSS_STM] = &xs_qdss_stm,
 	[SLAVE_TCU] = &xs_sys_tcu_cfg,
+	[SLAVE_APPSS_OSM] = &acm_apss_l3,
 };
 
 static struct qcom_icc_bcm *rsc_hlos_bcms[] = {
@@ -497,6 +514,18 @@ static struct qcom_icc_desc sdm845_rsc_hlos = {
 	.num_nodes = ARRAY_SIZE(rsc_hlos_nodes),
 	.bcms = rsc_hlos_bcms,
 	.num_bcms = ARRAY_SIZE(rsc_hlos_bcms),
+	.qcom_icc_vote_type = QCOM_ICC_VOTE_BCM,
+};
+
+static struct qcom_icc_node *osm_l3_nodes[] = {
+	[MASTER_OSM_L3] = &osm_agg,
+	[SLAVE_OSM_L3] = &osm_l3,
+};
+
+static struct qcom_icc_desc sdm845_osm_l3 = {
+	.nodes = osm_l3_nodes,
+	.num_nodes = ARRAY_SIZE(osm_l3_nodes),
+	.qcom_icc_vote_type = QCOM_ICC_VOTE_OSM,
 };
 
 static int qcom_icc_bcm_init(struct qcom_icc_bcm *bcm, struct device *dev)
@@ -678,6 +707,33 @@ static int qcom_icc_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
 	return 0;
 }
 
+static int qcom_icc_osm_set(struct icc_node *src, struct icc_node *dst)
+{
+	struct qcom_icc_provider *qp;
+	struct qcom_icc_node *qn;
+	struct icc_provider *provider;
+	struct icc_node *n;
+	u64 sum_bw;
+	u64 max_peak_bw;
+	u32 agg_avg = 0;
+	u32 agg_peak = 0;
+
+	qn = src->data;
+	provider = src->provider;
+	qp = to_qcom_provider(provider);
+
+	list_for_each_entry(n, &provider->nodes, node_list)
+		qcom_icc_aggregate(n, QCOM_ICC_TAG_ALWAYS, n->avg_bw,
+				   n->peak_bw, &agg_avg, &agg_peak);
+
+	sum_bw = icc_units_to_bps(agg_avg);
+	max_peak_bw = icc_units_to_bps(agg_peak);
+
+	qcom_icc_osm_l3_request(agg_avg, agg_peak, qn->buswidth);
+
+	return 0;
+}
+
 static int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 {
 	struct qcom_icc_provider *qp;
@@ -802,9 +858,20 @@ static int qnoc_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 
+	if (desc->qcom_icc_vote_type == QCOM_ICC_VOTE_OSM) {
+		ret = qcom_osm_l3_init(pdev);
+		if (ret) {
+			dev_err(&pdev->dev, "error osm init failed\n");
+			return ret;
+		}
+	}
+
 	provider = &qp->provider;
 	provider->dev = &pdev->dev;
-	provider->set = qcom_icc_set;
+	if (desc->qcom_icc_vote_type == QCOM_ICC_VOTE_OSM)
+		provider->set = qcom_icc_osm_set;
+	else
+		provider->set = qcom_icc_set;
 	provider->aggregate = qcom_icc_aggregate;
 	provider->xlate = of_icc_xlate_onecell;
 	INIT_LIST_HEAD(&provider->nodes);
@@ -886,6 +953,7 @@ static int qnoc_remove(struct platform_device *pdev)
 
 static const struct of_device_id qnoc_of_match[] = {
 	{ .compatible = "qcom,sdm845-rsc-hlos", .data = &sdm845_rsc_hlos },
+	{ .compatible = "qcom,sdm845-osm-l3", .data = &sdm845_osm_l3 },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, qnoc_of_match);
