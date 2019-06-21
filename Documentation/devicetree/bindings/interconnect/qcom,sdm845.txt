@@ -2,15 +2,33 @@ Qualcomm SDM845 Network-On-Chip interconnect driver binding
 -----------------------------------------------------------
 
 SDM845 interconnect providers support system bandwidth requirements through
-RPMh hardware accelerators known as Bus Clock Manager (BCM). The provider is
-able to communicate with the BCM through the Resource State Coordinator (RSC)
-associated with each execution environment. Provider nodes must reside within
-an RPMh device node pertaining to their RSC and each provider maps to a single
-RPMh resource.
+RPMh hardware accelerators known as Bus Clock Manager (BCM) and L3 bandwidth
+requirements through Operation State Manager (OSM). The provider is able to
+communicate with the BCM through the Resource State Coordinator (RSC) associated
+with each execution environment. The RSC provider nodes must reside within an
+RPMh device node pertaining to their RSC and each provider maps to a single RPMh
+resource.
 
 Required properties :
 - compatible : shall contain only one of the following:
 			"qcom,sdm845-rsc-hlos"
+			"qcom,sdm845-osm-l3"
+
+- clocks
+	Usage:		required for "qcom,sdm845-osm-l3"
+	Value type:	<phandle> From common clock binding.
+	Definition:	clock handle for XO clock and GPLL0 clock.
+
+- clock-names
+	Usage:		required for "qcom,sdm845-osm-l3"
+	Value type:	<string> From common clock binding.
+	Definition:	must be "xo", "alternate".
+
+- reg
+	Usage:		required for "qcom,sdm845-osm-l3"
+	Value type:	<prop-encoded-array>
+	Definition:	Address and size of the OSM L3 memory base.
+
 - #interconnect-cells : should contain 1
 
 Examples:
@@ -22,3 +40,12 @@ apps_rsc: rsc {
 	};
 };
 
+osm_l3: interconnect@17d41000 {
+	compatible = "qcom,sdm845-osm-l3";
+	reg = <0 0x17d41000 0 0x1400>;
+
+	clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GPLL0>;
+	clock-names = "xo", "alternate";
+
+	#interconnect-cells = <1>;
+};

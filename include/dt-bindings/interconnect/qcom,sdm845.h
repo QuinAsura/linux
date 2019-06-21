@@ -139,5 +139,9 @@
 #define SLAVE_SERVICE_SNOC		127
 #define SLAVE_QDSS_STM			128
 #define SLAVE_TCU			129
+#define SLAVE_APPSS_OSM			130
+
+#define MASTER_OSM_L3			0
+#define SLAVE_OSM_L3			1
 
 #endif
