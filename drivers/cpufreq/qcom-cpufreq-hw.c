@@ -282,7 +282,8 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 
 	dev_pm_opp_of_register_em(policy->cpus);
 
-	policy->fast_switch_possible = true;
+	/* Disable Fast switch to support DDR scaling */
+	policy->fast_switch_possible = false;
 
 	return 0;
 error:
