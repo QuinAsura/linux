@@ -18,6 +18,18 @@
 	};
 };
 
+&adsp_pas {
+	status = "okay";
+};
+
+&cdsp_pas {
+	status = "okay";
+};
+
+&mpss_pas {
+	status = "okay";
+};
+
 &qupv3_id_1 {
 	status = "okay";
 };

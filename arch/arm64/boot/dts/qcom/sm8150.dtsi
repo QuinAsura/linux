@@ -251,6 +251,107 @@
 		};
 	};
 
+	adsp_pas: remoteproc-adsp {
+		compatible = "qcom,sm8150-adsp-pas";
+
+		interrupts-extended = <&intc GIC_SPI 162 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready",
+				  "handover", "stop-ack";
+
+		clocks = <&rpmhcc RPMH_CXO_CLK>;
+		clock-names = "xo";
+
+		power-domains = <&aoss_qmp AOSS_QMP_LS_LPASS>,
+				<&rpmhpd SDM845_CX>;
+		power-domain-names = "load_state", "cx";
+
+		memory-region = <&adsp_mem>;
+
+		qcom,smem-states = <&adsp_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		status = "disabled";
+
+		glink-edge {
+			interrupts = <GIC_SPI 156 IRQ_TYPE_EDGE_RISING>;
+			label = "lpass";
+			qcom,remote-pid = <2>;
+			mboxes = <&apss_shared 8>;
+		};
+	};
+
+	cdsp_pas: remoteproc-cdsp {
+		compatible = "qcom,sm8150-cdsp-pas";
+
+		interrupts-extended = <&intc GIC_SPI 578 IRQ_TYPE_EDGE_RISING>,
+				      <&cdsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&cdsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&cdsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&cdsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready",
+				  "handover", "stop-ack";
+
+		clocks = <&rpmhcc RPMH_CXO_CLK>;
+		clock-names = "xo";
+
+		power-domains = <&aoss_qmp AOSS_QMP_LS_CDSP>,
+				<&rpmhpd SDM845_CX>;
+		power-domain-names = "load_state", "cx";
+
+		memory-region = <&cdsp_mem>;
+
+		qcom,smem-states = <&cdsp_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		status = "disabled";
+
+		glink-edge {
+			interrupts = <GIC_SPI 574 IRQ_TYPE_EDGE_RISING>;
+			label = "turing";
+			qcom,remote-pid = <5>;
+			mboxes = <&apss_shared 4>;
+		};
+	};
+
+	mpss_pas: remoteproc-mpss {
+		compatible = "qcom,sm8150-mpss-pas";
+
+		interrupts-extended = <&intc GIC_SPI 266 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 3 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 7 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready", "handover",
+				  "stop-ack", "shutdown-ack";
+
+		clocks = <&rpmhcc RPMH_CXO_CLK>;
+		clock-names = "xo";
+
+		power-domains = <&aoss_qmp AOSS_QMP_LS_MODEM>,
+				<&rpmhpd SDM845_CX>,
+				<&rpmhpd SDM845_MSS>;
+		power-domain-names = "load_state", "cx", "mss";
+
+		memory-region = <&mpss_mem>;
+
+		qcom,smem-states = <&modem_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		status = "disabled";
+
+		glink-edge {
+			interrupts = <GIC_SPI 449 IRQ_TYPE_EDGE_RISING>;
+			label = "modem";
+			qcom,remote-pid = <1>;
+			mboxes = <&apss_shared 12>;
+		};
+	};
+
 	tcsr_mutex: hwlock {
 		compatible = "qcom,tcsr-mutex";
 		syscon = <&tcsr_mutex_regs 0 0x1000>;
