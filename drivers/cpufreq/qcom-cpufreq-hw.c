@@ -284,6 +284,7 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 	xo_rate = clk_get_rate(clk);
 	clk_put(clk);
+	xo_rate = 19200000UL;
 
 	clk = clk_get(&pdev->dev, "alternate");
 	if (IS_ERR(clk))
@@ -291,6 +292,7 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 	cpu_hw_rate = clk_get_rate(clk) / CLK_HW_DIV;
 	clk_put(clk);
+	cpu_hw_rate = 300000000UL;
 
 	global_pdev = pdev;
 
