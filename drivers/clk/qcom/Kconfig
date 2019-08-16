@@ -317,6 +317,15 @@ config QCS_Q6SSTOP_404
 	  Say Y if you want to use the Q6SSTOP branch clocks of the WCSS clock
 	  controller to reset the Q6SSTOP subsystem.
 
+config SC_MSS_7180
+	tristate "SC7180 MSS Clock Controller"
+	select SC_GCC_7180
+	help
+	  Support for the MSS clock controller on Qualcomm Technologies, Inc
+	  SC7180 devices.
+	  Say Y if you want to use the MSS branch clocks of the MSS clock
+	  controller to reset the MSS subsystem.
+
 config SDM_GCC_845
 	tristate "SDM845 Global Clock Controller"
 	select QCOM_GDSC
