@@ -6,6 +6,7 @@
 #include <linux/spinlock.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
+#include <linux/soc/qcom/pdr.h>
 #include <dt-bindings/soc/qcom,apr.h>
 
 extern struct bus_type aprbus;
@@ -85,6 +86,8 @@ struct apr_device {
 	uint16_t	domain_id;
 	uint32_t	version;
 	char name[APR_NAME_SIZE];
+	const char *service_name;
+	const char *service_path;
 	spinlock_t	lock;
 	struct list_head node;
 };

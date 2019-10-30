@@ -5,6 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
@@ -21,15 +22,22 @@ struct apr {
 	spinlock_t rx_lock;
 	struct idr svcs_idr;
 	int dest_domain_id;
+	bool pd_enabled;
         struct workqueue_struct *rxwq;
         struct work_struct rx_work;
 	struct list_head rx_list;
+	struct pdr_handle pdr;
 };
 
 struct apr_rx_buf {
 	struct list_head node;
 	int len;
 	uint8_t buf[];
+};
+
+enum apr_subdevice_type {
+	APR_DEVICE_TYPE_DEF = 1,
+	APR_DEVICE_TYPE_PD,
 };
 
 /**
@@ -296,6 +304,11 @@ static int apr_add_device(struct device *dev, struct device_node *np,
 		  id->svc_id + 1, GFP_ATOMIC);
 	spin_unlock(&apr->svcs_lock);
 
+	of_property_read_string_index(np, "qcom,protection-domain",
+				      0, &adev->service_name);
+	of_property_read_string_index(np, "qcom,protection-domain",
+				      1, &adev->service_path);
+
 	dev_info(dev, "Adding APR dev: %s\n", dev_name(&adev->dev));
 
 	ret = device_register(&adev->dev);
@@ -307,13 +320,36 @@ static int apr_add_device(struct device *dev, struct device_node *np,
 	return ret;
 }
 
-static void of_register_apr_devices(struct device *dev)
+static void of_register_apr_devices(struct device *dev, enum apr_subdevice_type filter, const char *svc_path)
 {
 	struct apr *apr = dev_get_drvdata(dev);
 	struct device_node *node;
+	const char *service_name;
+	const char *service_path;
 
 	for_each_child_of_node(dev->of_node, node) {
 		struct apr_device_id id = { {0} };
+
+		if (filter & APR_DEVICE_TYPE_DEF) {
+			if (!of_property_read_bool(node, "qcom,protection-domain"))
+				continue;
+		}
+
+		of_property_read_string_index(node, "qcom,protection-domain",
+					      0, &service_name);
+		of_property_read_string_index(node, "qcom,protection-domain",
+					      1, &service_path);
+
+		if (filter & APR_DEVICE_TYPE_PD) {
+			if (service_path && service_name)
+				pdr_add_lookup(&apr->pdr, service_name, service_path);
+			continue;
+		}
+
+		if (svc_path) {
+			if (strncmp(service_path, svc_path, SERVREG_NAME_LENGTH + 1))
+				continue;
+		}
 
 		if (of_property_read_u32(node, "reg", &id.svc_id))
 			continue;
@@ -322,6 +358,49 @@ static void of_register_apr_devices(struct device *dev)
 
 		if (apr_add_device(dev, node, &id))
 			dev_err(dev, "Failed to add apr %d svc\n", id.svc_id);
+	}
+}
+
+static int apr_remove_device(struct device *dev, void *svc_path)
+{
+	struct apr_device *adev = to_apr_device(dev);
+
+	if (svc_path) {
+		if (!strncmp(adev->service_path, (char *)svc_path, SERVREG_NAME_LENGTH + 1))
+			device_unregister(&adev->dev);
+	} else {
+		device_unregister(&adev->dev);
+	}
+
+	return 0;
+}
+
+static int apr_pd_status(struct pdr_handle *pdr, struct pd_status *pds)
+{
+	struct apr *apr = container_of(pdr, struct apr, pdr);
+
+	switch(pds->state) {
+		case SERVREG_NOTIF_SERVICE_STATE_UP:
+			of_register_apr_devices(apr->dev, APR_DEVICE_TYPE_DEF, pds->service_path);
+			break;
+		case SERVREG_NOTIF_SERVICE_STATE_DOWN:
+			device_for_each_child(apr->dev, pds->service_path, apr_remove_device);
+			break;
+	}
+
+	return 0;
+}
+
+static void of_apr_get_pd_support(struct device *dev)
+{
+	struct apr *apr = dev_get_drvdata(dev);
+	struct device_node *node;
+
+	for_each_child_of_node(dev->of_node, node) {
+		if (of_property_read_bool(node, "qcom,protection-domain")) {
+			apr->pd_enabled = true;
+			break;
+		}
 	}
 }
 
@@ -349,21 +428,22 @@ static int apr_probe(struct rpmsg_device *rpdev)
                 dev_err(apr->dev, "Failed to start Rx WQ\n");
                 return -ENOMEM;
         }
+
+	of_apr_get_pd_support(dev);
+	if (apr->pd_enabled) {
+		ret = pdr_handle_init(&apr->pdr, apr_pd_status);
+		if (ret) {
+			dev_err(dev, "APR PDR init failed\n");
+			return ret;
+		}
+	}
+
         INIT_WORK(&apr->rx_work, apr_rxwq);
 	INIT_LIST_HEAD(&apr->rx_list);
 	spin_lock_init(&apr->rx_lock);
 	spin_lock_init(&apr->svcs_lock);
 	idr_init(&apr->svcs_idr);
-	of_register_apr_devices(dev);
-
-	return 0;
-}
-
-static int apr_remove_device(struct device *dev, void *null)
-{
-	struct apr_device *adev = to_apr_device(dev);
-
-	device_unregister(&adev->dev);
+	of_register_apr_devices(dev, APR_DEVICE_TYPE_PD, NULL);
 
 	return 0;
 }
@@ -371,6 +451,9 @@ static int apr_remove_device(struct device *dev, void *null)
 static void apr_remove(struct rpmsg_device *rpdev)
 {
 	struct apr *apr = dev_get_drvdata(&rpdev->dev);
+
+	if (apr->pd_enabled)
+		pdr_handle_release(&apr->pdr);
 
 	destroy_workqueue(apr->rxwq);
 	device_for_each_child(&rpdev->dev, NULL, apr_remove_device);
