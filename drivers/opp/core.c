@@ -27,6 +27,10 @@
  * various states of availability.
  */
 LIST_HEAD(opp_tables);
+
+/* The root of the list of opp-tables that aren't fully initialized yet */
+LIST_HEAD(pending_opp_tables);
+
 /* Lock to allow exclusive modification to the device and opp lists */
 DEFINE_MUTEX(opp_table_lock);
 
@@ -977,6 +981,10 @@ static int _set_required_opps(struct device *dev,
 	if (!required_opp_tables)
 		return 0;
 
+	/* required-opps not fully initialized yet */
+	if (!list_empty(&opp_table->pending))
+		return -EBUSY;
+
 	/* Single genpd case */
 	if (!genpd_virt_devs && required_opp_tables[0]->is_genpd) {
 		pstate = likely(opp) ? opp->required_opps[0]->pstate : 0;
@@ -1187,6 +1195,7 @@ static struct opp_table *_allocate_opp_table(struct device *dev, int index)
 	mutex_init(&opp_table->lock);
 	mutex_init(&opp_table->genpd_virt_dev_lock);
 	INIT_LIST_HEAD(&opp_table->dev_list);
+	INIT_LIST_HEAD(&opp_table->pending);
 
 	/* Mark regulator count uninitialized */
 	opp_table->regulator_count = -1;
@@ -2235,6 +2244,10 @@ int dev_pm_opp_xlate_performance_state(struct opp_table *src_table,
 
 	if (!pstate)
 		return 0;
+
+	/* required-opps not fully initialized yet */
+	if (!list_empty(&src_table->pending))
+		return -EBUSY;
 
 	/*
 	 * Normally the src_table will have the "required_opps" property set to

@@ -143,7 +143,7 @@ static void _opp_table_free_required_tables(struct opp_table *opp_table)
 
 	for (i = 0; i < opp_table->required_opp_count; i++) {
 		if (IS_ERR_OR_NULL(required_opp_tables[i]))
-			break;
+			continue;
 
 		dev_pm_opp_put_opp_table(required_opp_tables[i]);
 	}
@@ -152,6 +152,7 @@ static void _opp_table_free_required_tables(struct opp_table *opp_table)
 
 	opp_table->required_opp_count = 0;
 	opp_table->required_opp_tables = NULL;
+	list_del(&opp_table->pending);
 }
 
 /*
@@ -164,6 +165,7 @@ static void _opp_table_alloc_required_tables(struct opp_table *opp_table,
 {
 	struct opp_table **required_opp_tables;
 	struct device_node *required_np, *np;
+	bool pending = false;
 	int count, i;
 
 	/* Traversing the first OPP node is all we need */
@@ -193,9 +195,15 @@ static void _opp_table_alloc_required_tables(struct opp_table *opp_table,
 		required_opp_tables[i] = _find_table_of_opp_np(required_np);
 		of_node_put(required_np);
 
-		if (IS_ERR(required_opp_tables[i]))
-			goto free_required_tables;
+		if (IS_ERR(required_opp_tables[i])) {
+			pending = true;
+			continue;
+		}
 	}
+
+	/* Let's do the linking later on */
+	if (pending)
+		list_add(&opp_table->pending, &pending_opp_tables);
 
 	goto put_np;
 
@@ -265,7 +273,7 @@ void _of_opp_free_required_opps(struct opp_table *opp_table,
 
 	for (i = 0; i < opp_table->required_opp_count; i++) {
 		if (!required_opps[i])
-			break;
+			continue;
 
 		/* Put the reference back */
 		dev_pm_opp_put(required_opps[i]);
@@ -296,6 +304,10 @@ static int _of_opp_alloc_required_opps(struct opp_table *opp_table,
 	for (i = 0; i < count; i++) {
 		required_table = opp_table->required_opp_tables[i];
 
+		/* Required table not added yet, we will link later */
+		if (IS_ERR_OR_NULL(required_table))
+			continue;
+
 		np = of_parse_required_opp(opp->np, i);
 		if (unlikely(!np)) {
 			ret = -ENODEV;
@@ -319,6 +331,90 @@ free_required_opps:
 	_of_opp_free_required_opps(opp_table, opp);
 
 	return ret;
+}
+
+static int lazy_link_required_opps(struct opp_table *opp_table,
+				   struct opp_table *required_opp_table,
+				   int index)
+{
+	struct device_node *required_np;
+	struct dev_pm_opp *opp;
+
+	list_for_each_entry(opp, &opp_table->opp_list, node) {
+		required_np = of_parse_required_opp(opp->np, index);
+		if (unlikely(!required_np))
+			return -ENODEV;
+
+		opp->required_opps[index] = _find_opp_of_np(required_opp_table, required_np);
+		of_node_put(required_np);
+
+		if (!opp->required_opps[index]) {
+			pr_err("%s: Unable to find required OPP node: %pOF (%d)\n",
+					__func__, opp->np, index);
+			return -ENODEV;
+		}
+	}
+
+	return 0;
+}
+
+static void lazy_link_required_opp_table(struct opp_table *required_opp_table)
+{
+	struct opp_table *opp_table, *temp, **required_opp_tables;
+	struct device_node *required_np, *opp_np, *required_table_np;
+	int i, ret;
+
+	mutex_lock(&opp_table_lock);
+
+	list_for_each_entry_safe(opp_table, temp, &pending_opp_tables, pending) {
+		bool pending = false;
+
+		/* opp_np can't be invalid here */
+		opp_np = of_get_next_available_child(opp_table->np, NULL);
+
+		for (i = 0; i < opp_table->required_opp_count; i++) {
+			required_opp_tables = opp_table->required_opp_tables;
+
+			if (!IS_ERR_OR_NULL(required_opp_tables[i]))
+				continue;
+
+			/* required_np can't be invalid here */
+			required_np = of_parse_required_opp(opp_np, i);
+			required_table_np = of_get_parent(required_np);
+
+			of_node_put(required_table_np);
+			of_node_put(required_np);
+
+			if (required_table_np != required_opp_table->np) {
+				pending = true;
+				continue;
+			}
+
+			required_opp_tables[i] = required_opp_table;
+			_get_opp_table_kref(required_opp_table);
+
+			/* Link OPPs now */
+			ret = lazy_link_required_opps(opp_table, required_opp_table, i);
+			if (ret) {
+				struct dev_pm_opp *opp;
+
+				/* Mark OPPs unusable on error */
+				list_for_each_entry(opp, &opp_table->opp_list, node)
+					opp->available = false;
+				break;
+			}
+		}
+
+		of_node_put(opp_np);
+
+		/* All required opp-tables found, remove from pending list */
+		if (!pending) {
+			list_del(&opp_table->pending);
+			INIT_LIST_HEAD(&opp_table->pending);
+		}
+	}
+
+	mutex_unlock(&opp_table_lock);
 }
 
 static bool _opp_is_supported(struct device *dev, struct opp_table *opp_table,
@@ -717,6 +813,8 @@ static int _of_add_opp_table_v2(struct device *dev, struct opp_table *opp_table)
 
 	if (pstate_count)
 		opp_table->genpd_performance_state = true;
+
+	lazy_link_required_opp_table(opp_table);
 
 	return 0;
 
