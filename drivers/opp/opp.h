@@ -25,7 +25,7 @@ struct regulator;
 /* Lock to allow exclusive modification to the device and opp lists */
 extern struct mutex opp_table_lock;
 
-extern struct list_head opp_tables;
+extern struct list_head opp_tables, pending_opp_tables;
 
 /*
  * Internal data structure organization with the OPP layer library is as
@@ -164,7 +164,7 @@ enum opp_table_access {
  * meant for book keeping and private to OPP library.
  */
 struct opp_table {
-	struct list_head node;
+	struct list_head node, pending;
 
 	struct blocking_notifier_head head;
 	struct list_head dev_list;
