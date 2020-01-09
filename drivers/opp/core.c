@@ -46,10 +46,13 @@ static struct opp_device *_find_opp_dev(const struct device *dev,
 	return NULL;
 }
 
-static struct opp_table *_find_opp_table_unlocked(struct device *dev)
+static struct opp_table *_find_opp_table_indexed_unlocked(struct device *dev, int index)
 {
 	struct opp_table *opp_table;
+	struct device_node *np;
 	bool found;
+
+	np = _opp_of_get_opp_desc_node(dev->of_node, index);
 
 	list_for_each_entry(opp_table, &opp_tables, node) {
 		mutex_lock(&opp_table->lock);
@@ -57,13 +60,28 @@ static struct opp_table *_find_opp_table_unlocked(struct device *dev)
 		mutex_unlock(&opp_table->lock);
 
 		if (found) {
-			_get_opp_table_kref(opp_table);
+			if (!np) {
+				_get_opp_table_kref(opp_table);
+				return opp_table;
+			}
 
-			return opp_table;
+			if (opp_table->np == np) {
+				of_node_put(np);
+				_get_opp_table_kref(opp_table);
+				return opp_table;
+			}
 		}
 	}
 
+	if (np)
+		of_node_put(np);
+
 	return ERR_PTR(-ENODEV);
+}
+
+static struct opp_table *_find_opp_table_unlocked(struct device *dev)
+{
+	return _find_opp_table_indexed_unlocked(dev, 0);
 }
 
 /**
@@ -1238,7 +1256,7 @@ static struct opp_table *_opp_get_opp_table(struct device *dev, int index)
 	/* Hold our table modification lock here */
 	mutex_lock(&opp_table_lock);
 
-	opp_table = _find_opp_table_unlocked(dev);
+	opp_table = _find_opp_table_indexed_unlocked(dev, index);
 	if (!IS_ERR(opp_table))
 		goto unlock;
 
