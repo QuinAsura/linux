@@ -46,10 +46,15 @@ static struct opp_device *_find_opp_dev(const struct device *dev,
 	return NULL;
 }
 
-static struct opp_table *_find_opp_table_unlocked(struct device *dev)
+static struct opp_table *_find_opp_table_indexed_unlocked(struct device *dev,
+							  int index)
 {
 	struct opp_table *opp_table;
+	struct device_node *np;
 	bool found;
+
+	np = _opp_of_get_opp_desc_node(dev->of_node, index);
+	of_node_put(np);
 
 	list_for_each_entry(opp_table, &opp_tables, node) {
 		mutex_lock(&opp_table->lock);
@@ -57,13 +62,44 @@ static struct opp_table *_find_opp_table_unlocked(struct device *dev)
 		mutex_unlock(&opp_table->lock);
 
 		if (found) {
-			_get_opp_table_kref(opp_table);
+			if (np && opp_table->np != np)
+				continue;
 
+			_get_opp_table_kref(opp_table);
 			return opp_table;
 		}
 	}
 
 	return ERR_PTR(-ENODEV);
+}
+
+/**
+ * _find_opp_table_indexed() - find opp_table struct using device pointer
+ * @dev:	device pointer used to lookup OPP table
+ * @index:	Index number.
+ *
+ * Search OPP table for one containing matching device at the given
+ * index.
+ *
+ * Return: pointer to 'struct opp_table' if found, otherwise -ENODEV or
+ * -EINVAL based on type of error.
+ *
+ * The callers must call dev_pm_opp_put_opp_table() after the table is used.
+ */
+struct opp_table *_find_opp_table_indexed(struct device *dev, int index)
+{
+	struct opp_table *opp_table;
+
+	if (IS_ERR_OR_NULL(dev)) {
+		pr_err("%s: Invalid parameters\n", __func__);
+		return ERR_PTR(-EINVAL);
+	}
+
+	mutex_lock(&opp_table_lock);
+	opp_table = _find_opp_table_indexed_unlocked(dev, index);
+	mutex_unlock(&opp_table_lock);
+
+	return opp_table;
 }
 
 /**
@@ -79,18 +115,7 @@ static struct opp_table *_find_opp_table_unlocked(struct device *dev)
  */
 struct opp_table *_find_opp_table(struct device *dev)
 {
-	struct opp_table *opp_table;
-
-	if (IS_ERR_OR_NULL(dev)) {
-		pr_err("%s: Invalid parameters\n", __func__);
-		return ERR_PTR(-EINVAL);
-	}
-
-	mutex_lock(&opp_table_lock);
-	opp_table = _find_opp_table_unlocked(dev);
-	mutex_unlock(&opp_table_lock);
-
-	return opp_table;
+	return _find_opp_table_indexed(dev, 0);
 }
 
 /**
@@ -1238,7 +1263,7 @@ static struct opp_table *_opp_get_opp_table(struct device *dev, int index)
 	/* Hold our table modification lock here */
 	mutex_lock(&opp_table_lock);
 
-	opp_table = _find_opp_table_unlocked(dev);
+	opp_table = _find_opp_table_indexed_unlocked(dev, index);
 	if (!IS_ERR(opp_table))
 		goto unlock;
 
@@ -2612,7 +2637,7 @@ void _dev_pm_opp_find_and_remove_table(struct device *dev)
 	struct opp_table *opp_table;
 
 	/* Check for existing table for 'dev' */
-	opp_table = _find_opp_table(dev);
+	opp_table = _find_opp_table_indexed(dev, 0);
 	if (IS_ERR(opp_table)) {
 		int error = PTR_ERR(opp_table);
 
