@@ -25,8 +25,7 @@
  * Returns opp descriptor node for a device node, caller must
  * do of_node_put().
  */
-static struct device_node *_opp_of_get_opp_desc_node(struct device_node *np,
-						     int index)
+struct device_node *_opp_of_get_opp_desc_node(struct device_node *np, int index)
 {
 	/* "operating-points-v2" can be an array for power domain providers */
 	return of_parse_phandle(np, "operating-points-v2", index);
