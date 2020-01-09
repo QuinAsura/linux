@@ -28,6 +28,7 @@
 
 #define OSM_L3_MAX_LINKS		1
 #define SDM845_MAX_RSC_NODES		130
+#define SC7180_MAX_RSC_NODES		137
 
 #define to_qcom_provider(_provider) \
 	container_of(_provider, struct qcom_osm_l3_icc_provider, provider)
@@ -35,6 +36,11 @@
 enum {
 	SDM845_MASTER_OSM_L3_APPS = SDM845_MAX_RSC_NODES + 1,
 	SDM845_SLAVE_OSM_L3,
+};
+
+enum {
+	SC7180_MASTER_OSM_L3_APPS = SC7180_MAX_RSC_NODES + 1,
+	SC7180_SLAVE_OSM_L3,
 };
 
 struct qcom_osm_l3_icc_provider {
@@ -85,6 +91,19 @@ static struct qcom_icc_node *sdm845_osm_l3_nodes[] = {
 static struct qcom_icc_desc sdm845_icc_osm_l3 = {
 	.nodes = sdm845_osm_l3_nodes,
 	.num_nodes = ARRAY_SIZE(sdm845_osm_l3_nodes),
+};
+
+DEFINE_QNODE(sc7180_osm_apps_l3, SC7180_MASTER_OSM_L3_APPS, 16, SC7180_SLAVE_OSM_L3);
+DEFINE_QNODE(sc7180_osm_l3, SC7180_SLAVE_OSM_L3, 16);
+
+static struct qcom_icc_node *sc7180_osm_l3_nodes[] = {
+	[MASTER_OSM_L3_APPS] = &sc7180_osm_apps_l3,
+	[SLAVE_OSM_L3] = &sc7180_osm_l3,
+};
+
+static struct qcom_icc_desc sc7180_icc_osm_l3 = {
+	.nodes = sc7180_osm_l3_nodes,
+	.num_nodes = ARRAY_SIZE(sc7180_osm_l3_nodes),
 };
 
 static int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
@@ -248,6 +267,7 @@ err:
 }
 
 static const struct of_device_id osm_l3_of_match[] = {
+	{ .compatible = "qcom,sc7180-osm-l3", .data = &sc7180_icc_osm_l3 },
 	{ .compatible = "qcom,sdm845-osm-l3", .data = &sdm845_icc_osm_l3 },
 	{ },
 };
