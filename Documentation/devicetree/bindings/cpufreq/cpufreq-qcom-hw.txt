@@ -8,7 +8,10 @@ Properties:
 - compatible
 	Usage:		required
 	Value type:	<string>
-	Definition:	must be "qcom,cpufreq-hw".
+	Definition:	must be one of:
+			"qcom,cpufreq-hw"
+			"qcom,sc7180-cpufreq-hw"
+			"qcom,sdm845-cpufreq-hw"
 
 - clocks
 	Usage:		required
@@ -34,6 +37,32 @@ Properties:
 - #freq-domain-cells:
 	Usage:		required.
 	Definition:	Number of cells in a freqency domain specifier.
+
+- operating-points-v2: phandle to the DDR/L3 OPP tables per freq-domain.
+		qcom,cpufreq-hw:
+		qcom,sc7180-cpufreq-hw:
+		    phandles to "cpu0-ddr", "cpu6-ddr", "cpu0-l3", "cpu6-l3"
+		    opp-tables.
+		qcom,sdm845-cpufreq-hw:
+		    phandles to "cpu0-ddr", "cpu4-ddr", "cpu0-l3", "cpu4-l3"
+		    opp-tables.
+
+- interconnects : interconnect path specifier for scaling DDR and L3 paths
+		  Documentation/devicetree/bindings/interconnect/interconnect.txt.
+		qcom,cpufreq-hw:
+		qcom,sc7180-cpufreq-hw:
+		    path specifier for the following "cpu0-ddr", "cpu6-ddr",
+		    "cpu0-l3", "cpu6-l3" interconnect paths.
+		qcom,sdm845-cpufreq-hw:
+		    path specifier for the following "cpu0-ddr", "cpu4-ddr",
+		    "cpu0-l3", "cpu4-l3" interconnect paths.
+
+- interconnect-names : each cpufreq-domain will have 2 port names (ddr, l3).
+		qcom,cpufreq-hw:
+		qcom,sc7180-cpufreq-hw:
+		    must be "cpu0-ddr", "cpu6-ddr", "cpu0-l3", "cpu6-l3"
+		qcom,sdm845-cpufreq-hw:
+		    must be "cpu0-ddr", "cpu4-ddr", "cpu0-l3", "cpu4-l3"
 
 * Property qcom,freq-domain
 Devices supporting freq-domain must set their "qcom,freq-domain" property with
@@ -160,12 +189,21 @@ DCVS state together.
 
  soc {
 	cpufreq_hw: cpufreq@17d43000 {
-		compatible = "qcom,cpufreq-hw";
+		compatible = "qcom,sdm845-cpufreq-hw";
 		reg = <0x17d43000 0x1400>, <0x17d45800 0x1400>;
 		reg-names = "freq-domain0", "freq-domain1";
 
 		clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GPLL0>;
 		clock-names = "xo", "alternate";
+
+		operating-points-v2 = <&cpu0_ddr_bw_opp_table>, <&cpu4_ddr_bw_opp_table>,
+				      <&cpu0_l3_bw_opp_table>, <&cpu4_l3_bw_opp_table>;
+
+		interconnects = <&gladiator_noc MASTER_APPSS_PROC &mem_noc SLAVE_EBI1>,
+				<&gladiator_noc MASTER_APPSS_PROC &mem_noc SLAVE_EBI1>,
+				<&osm_l3 MASTER_OSM_L3_APPS &osm_l3 SLAVE_OSM_L3>,
+				<&osm_l3 MASTER_OSM_L3_APPS &osm_l3 SLAVE_OSM_L3>;
+		interconnect-names = "cpu0-ddr", "cpu4-ddr", "cpu0-l3", "cpu4-l3";
 
 		#freq-domain-cells = <1>;
 	};
