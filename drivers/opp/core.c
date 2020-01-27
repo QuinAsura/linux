@@ -2632,12 +2632,13 @@ int dev_pm_opp_unregister_notifier(struct device *dev,
 }
 EXPORT_SYMBOL(dev_pm_opp_unregister_notifier);
 
-void _dev_pm_opp_find_and_remove_table(struct device *dev)
+static void _dev_pm_opp_find_and_remove_table_indexed(struct device *dev,
+						      int index)
 {
 	struct opp_table *opp_table;
 
 	/* Check for existing table for 'dev' */
-	opp_table = _find_opp_table_indexed(dev, 0);
+	opp_table = _find_opp_table_indexed(dev, index);
 	if (IS_ERR(opp_table)) {
 		int error = PTR_ERR(opp_table);
 
@@ -2656,6 +2657,18 @@ void _dev_pm_opp_find_and_remove_table(struct device *dev)
 
 	/* Drop reference taken while the OPP table was added */
 	dev_pm_opp_put_opp_table(opp_table);
+}
+
+void _dev_pm_opp_find_and_remove_table(struct device *dev)
+{
+	int count, i;
+
+	count = of_count_phandle_with_args(dev->of_node,
+					   "operating-points-v2", NULL);
+	count = max(count, 1);
+
+	for (i = 0; i < count; i++)
+		_dev_pm_opp_find_and_remove_table_indexed(dev, i);
 }
 
 /**
