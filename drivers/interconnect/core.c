@@ -361,6 +361,13 @@ struct icc_node_data *of_icc_get_from_provider(struct of_phandle_args *spec)
 	if (IS_ERR(node))
 		return ERR_CAST(node);
 
+	if (!data) {
+		data = kzalloc(sizeof(*data), GFP_KERNEL);
+		if (!data)
+			return ERR_PTR(-ENOMEM);
+		data->node = node;
+	}
+
 	return data;
 }
 EXPORT_SYMBOL_GPL(of_icc_get_from_provider);
@@ -461,6 +468,7 @@ struct icc_path *of_icc_get_by_index(struct device *dev, int idx)
 		if (PTR_ERR(dst_data) != -EPROBE_DEFER)
 			dev_err(dev, "error finding dst node: %ld\n",
 				PTR_ERR(dst_data));
+		kfree(src_data);
 		return ERR_CAST(dst_data);
 	}
 
@@ -469,19 +477,22 @@ struct icc_path *of_icc_get_by_index(struct device *dev, int idx)
 	mutex_unlock(&icc_lock);
 	if (IS_ERR(path)) {
 		dev_err(dev, "%s: invalid path=%ld\n", __func__, PTR_ERR(path));
-		return path;
-	}
-
-	path->name = kasprintf(GFP_KERNEL, "%s-%s",
-			       src_data->node->name, dst_data->node->name);
-	if (!path->name) {
-		kfree(path);
-		return ERR_PTR(-ENOMEM);
+		goto free_icc_data;
 	}
 
 	if (src_data->tag && src_data->tag == dst_data->tag)
 		icc_set_tag(path, src_data->tag);
 
+	path->name = kasprintf(GFP_KERNEL, "%s-%s",
+			       src_data->node->name, dst_data->node->name);
+	if (!path->name) {
+		kfree(path);
+		path = ERR_PTR(-ENOMEM);
+	}
+
+free_icc_data:
+	kfree(src_data);
+	kfree(dst_data);
 	return path;
 }
 EXPORT_SYMBOL_GPL(of_icc_get_by_index);
